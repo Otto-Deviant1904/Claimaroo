@@ -7,7 +7,7 @@ describe("runCoverageCheck", () => {
     coverageType: "comprehensive" as const,
     startDate: "2025-07-01",
     endDate: "2026-06-30",
-    incidentTime: "2026-09-10T08:42:00+10:00",
+    incidentTime: "2026-03-10T08:42:00+10:00",
     incidentType: "collision",
     injuries: false,
   };
