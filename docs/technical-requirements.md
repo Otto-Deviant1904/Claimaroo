@@ -3,7 +3,7 @@
 | Field | Value |
 |---|---|
 | Version | 1.0 |
-| Date | 11 September 2026 |
+| Date | 12 September 2026 |
 | Status | **Locked** |
 | Source of truth | This document. On conflict with the proposal in `README.md`, this specification wins. `docs/prd-v3.md` is superseded and must not be implemented. |
 | Code baseline | `origin/main` after PR #3 (`8479593`) |
