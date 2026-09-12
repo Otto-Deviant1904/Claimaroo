@@ -28,3 +28,16 @@ cd chatgpt-claims-dashboard
 python3 -m http.server 8765
 # open http://localhost:8765/claims/
 ```
+
+## Live backend (integrated)
+
+`backend.js` (loaded after `app.js`) connects the dashboard to the Next API
+(default `http://localhost:3000`, override with `window.CLAIM_API_BASE`):
+
+- `GET /api/claims` + `GET /api/claims/[id]` replace fixtures; footer shows
+  "Live backend connected". Unreachable backend falls back to fixtures.
+- Officer actions `POST /api/claims/[id]/actions` first, then fall back to
+  the local `ClaimModel.applyAction` when offline.
+- Completes the `ClaimModel.STATUS` enum (`human_review`, `urgent`) so live
+  triage routes render.
+- Requires CORS on the claims endpoints (see `src/lib/cors.ts`).

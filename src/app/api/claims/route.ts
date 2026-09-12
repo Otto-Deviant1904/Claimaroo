@@ -2,8 +2,13 @@ import { desc, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { getDb } from "@/db";
 import { claims, customers } from "@/db/schema";
+import { corsPreflight, withCors } from "@/lib/cors";
 
 export const dynamic = "force-dynamic";
+
+export function OPTIONS() {
+  return corsPreflight();
+}
 
 export async function GET() {
   try {
@@ -23,9 +28,9 @@ export async function GET() {
       .from(claims)
       .innerJoin(customers, eq(customers.id, claims.customerId))
       .orderBy(desc(claims.updatedAt));
-    return NextResponse.json({ claims: rows });
+    return withCors(NextResponse.json({ claims: rows }));
   } catch (error) {
     const message = error instanceof Error ? error.message : "Database unavailable";
-    return NextResponse.json({ error: message, claims: [] }, { status: 503 });
+    return withCors(NextResponse.json({ error: message, claims: [] }, { status: 503 }));
   }
 }

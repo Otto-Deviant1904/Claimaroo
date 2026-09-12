@@ -1,7 +1,12 @@
 import { NextResponse } from "next/server";
 import { loadCasePack } from "@/lib/tools";
+import { corsPreflight, withCors } from "@/lib/cors";
 
 export const dynamic = "force-dynamic";
+
+export function OPTIONS() {
+  return corsPreflight();
+}
 
 export async function GET(
   _request: Request,
@@ -10,7 +15,7 @@ export async function GET(
   const { id } = await context.params;
   try {
     const pack = await loadCasePack(id);
-    return NextResponse.json({
+    return withCors(NextResponse.json({
       claim: pack.claim,
       customer: pack.customer,
       policy: pack.policy,
@@ -21,10 +26,10 @@ export async function GET(
       })),
       assessment: pack.assessment,
       audit: pack.audit,
-    });
+    }));
   } catch (error) {
     const message = error instanceof Error ? error.message : "Not found";
     const status = message.includes("not found") ? 404 : 503;
-    return NextResponse.json({ error: message }, { status });
+    return withCors(NextResponse.json({ error: message }, { status }));
   }
 }
