@@ -37,6 +37,8 @@ curl -s -X POST http://localhost:3000/api/tools/run_triage \
 
 To register an ElevenLabs agent later (Slice 2): `npm run agent:create`, then set `ELEVENLABS_AGENT_ID`. Tools are **client** tools — the `/call` page must `POST /api/tools/{name}`; ElevenLabs will not hit the API by itself.
 
+Locked engineering requirements: [`docs/technical-requirements.md`](docs/technical-requirements.md). Where that document and this proposal conflict, the technical requirements win.
+
 ---
 
 **FORWARD 2026 — AI Claims Agent**

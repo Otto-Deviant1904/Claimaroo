@@ -1,6 +1,6 @@
 # Handoff — 25% backend checkpoint
 
-Open this file before adding UI. Branch: `cursor/ai-claims-agent-prototype-049c`. Product spec: root [`README.md`](../README.md) (sections 8–10, 14, 23). Do **not** implement [`docs/prd-v3.md`](prd-v3.md); that FNOL-only spec is superseded.
+Open this file before adding UI. Branch: `cursor/ai-claims-agent-prototype-049c`. Locked requirements: [`docs/technical-requirements.md`](technical-requirements.md). Product spec: root [`README.md`](../README.md) (sections 8–10, 14, 23). Do **not** implement [`docs/prd-v3.md`](prd-v3.md); that FNOL-only spec is superseded.
 
 ## What this 25% includes
 
