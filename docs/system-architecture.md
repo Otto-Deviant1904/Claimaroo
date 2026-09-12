@@ -4,7 +4,7 @@ Status: descriptive, not prescriptive — this documents what the current code a
 
 ## 1. One-paragraph summary
 
-A customer talks to a voice agent hosted by ElevenLabs. That agent doesn't touch our database directly — it calls "client tools" that run in the *browser tab*, which in turn call our own Next.js API routes, which read/write Postgres. Photo evidence goes through the same API and gets analyzed by an external vision model (OpenAI or Anthropic) or a filename heuristic if no key is set. Every tool call and every officer action writes an audit row. A claims officer reviews the resulting case on a dashboard and is the only one who can push a claim past `approved_next_stage`. Nothing in this system settles or pays a claim — every number is labeled preliminary.
+A customer talks to a voice agent hosted by ElevenLabs. That agent doesn't touch our database directly — it calls "client tools" that run in the *browser tab*, which in turn call our own Next.js API routes, which read/write Postgres. Photo evidence goes through the same API and gets analyzed by an optional local damage model (`LOCAL_VISION_URL`) first, then an external vision model (OpenAI or Anthropic), then a filename heuristic if no key is set or all models fail. Every tool call and every officer action writes an audit row. A claims officer reviews the resulting case on a dashboard and is the only one who can push a claim past `approved_next_stage`. Nothing in this system settles or pays a claim — every number is labeled preliminary.
 
 ## 2. Component diagram
 
@@ -32,13 +32,15 @@ A customer talks to a voice agent hosted by ElevenLabs. That agent doesn't touch
                                                         │
                               ┌─────────────────────────┼───────────────────────┐
                               ▼                                                  ▼
-                    ┌───────────────────┐                          ┌─────────────────────────┐
-                    │  src/lib/tools.ts  │                          │  OPENAI / ANTHROPIC API   │
-                    │  executeTool()     │──(image analysis)──────►│  gpt-4o-mini /             │
-                    │  + triage/coverage/│                          │  claude-sonnet-4-5         │
-                    │    estimate/analyse│                          │  (only if key is set;      │
-                    └─────────┬─────────┘                          │   else heuristic fallback) │
-                              │                                     └─────────────────────────┘
+                              ┌───────────────────┐                          ┌─────────────────────────┐
+                              │  src/lib/tools.ts  │                          │  LOCAL MODEL (optional)   │
+                              │  executeTool()     │──(image analysis)──────►│  LOCAL_VISION_URL         │
+                              │  + triage/coverage/│                          │  else OPENAI / ANTHROPIC  │
+                              │    estimate/analyse│                          │  gpt-4o-mini /             │
+                              └─────────┬─────────┘                          │  claude-sonnet-4-5         │
+                                                                         │  (only if no local hit    │
+                                                                         │   + key set; else heuristic)│
+                                                                         └─────────────────────────┘
                               ▼
                     ┌───────────────────┐
                     │      POSTGRES       │
@@ -57,7 +59,8 @@ A customer talks to a voice agent hosted by ElevenLabs. That agent doesn't touch
 | Next.js API routes (`src/app/api/**`) | Local dev server (`npm run dev`), or wherever it's deployed | This is the only thing that talks to Postgres or holds API keys |
 | Postgres | Docker container (`docker-compose.yml`) locally | Holds every table including raw evidence bytes |
 | ElevenLabs Conversational AI | ElevenLabs' cloud | Holds the actual conversation LLM (Gemini 2.0 Flash by default) and voice pipeline; never talks to our DB directly |
-| OpenAI / Anthropic vision call | Their cloud, invoked from our server | Only reached if `OPENAI_API_KEY`/`ANTHROPIC_API_KEY` is set; otherwise `analyse.ts` never leaves the server |
+| OpenAI / Anthropic vision call | Their cloud, invoked from our server | Reached only if no local finding and `OPENAI_API_KEY`/`ANTHROPIC_API_KEY` is set; otherwise `analyse.ts` never leaves the server |
+| Local damage model (`LOCAL_VISION_URL`) | Self-hosted HTTP, invoked from our server | Optional `POST { filename, mime_type, image_base64 }`, 8s timeout. Tried first per file; on failure/`!ok`/empty falls through to cloud vision, then heuristic. Never throws. |
 
 Nothing here requires a public URL — the ElevenLabs agent's tools are registered as **client** tools (`scripts/create-elevenlabs-agent.ts`), so ElevenLabs pushes "call this tool" down to the browser tab over the WebSocket instead of hitting our server directly. That's why `localhost:3000` works for a live demo without tunneling.
 
@@ -77,9 +80,10 @@ Nothing here requires a public URL — the ElevenLabs agent's tools are register
 
 1. Once a claim exists, the `/call` page shows an upload control; the file goes to `POST /api/evidence` (multipart, max 10MB), which stores the bytes in Postgres and flips claim status `intake` → `awaiting_evidence`.
 2. The agent calls `attach_evidence` (client tool) with the returned `evidence_id`, linking it to the claim if needed.
-3. The agent calls `analyse_damage`. Server-side, `src/lib/analyse.ts` either:
-   - calls OpenAI/Anthropic's vision endpoint with the image as base64 and parses the response into `DamageFinding[]`, **or**
-   - if no key is set (or the file isn't a raster image), falls back to `heuristicFromFilename()` — pure keyword matching on the filename, no model call at all.
+3. The agent calls `analyse_damage`. Server-side, `src/lib/analyse.ts` tries in order per file:
+    - `LOCAL_VISION_URL` local model (if set + raster bytes): `POST { filename, mime_type, image_base64 }`, 8s timeout, `source: "local_model"`, `analyzer: "local_model"`, **or**
+    - OpenAI/Anthropic vision endpoint with the image as base64, parsed into `DamageFinding[]` (`source: "vision"`, `analyzer: "vision"`), **or**
+    - `heuristicFromFilename()` (`source: "heuristic"`, `analyzer: "heuristic"`) if no key is set, the file isn't a raster image, or all model calls fail/return empty — pure keyword matching, no model call at all.
 4. Findings are written to the `assessments` table; `estimate_repair` turns findings into a preliminary AUD range using `src/lib/estimate.ts`.
 
 ### 4.3 Coverage + triage (deterministic, not the LLM's call)
@@ -118,12 +122,13 @@ This matters for the dashboard: the officer isn't trusting the AI's self-report,
 |---|---|
 | `DATABASE_URL` / Postgres unreachable | `GET /api/claims` → `503` with empty list; claim detail queries throw, page should show an error state, not crash |
 | `ELEVENLABS_API_KEY` / `ELEVENLABS_AGENT_ID` | `GET /api/conversation/signed-url` → `503` with `missing: {apiKey, agentId}`; `/call` can't start a session. Everything else (tools, APIs, dashboard, seed) is unaffected |
-| `OPENAI_API_KEY` and `ANTHROPIC_API_KEY` both unset | `analyse_damage` silently uses the filename heuristic instead of a real vision call — no error, just lower-quality (and clearly labeled) findings |
+| `OPENAI_API_KEY` and `ANTHROPIC_API_KEY` both unset (and no local finding) | `analyse_damage` silently uses the filename heuristic instead of a real vision call — no error, just lower-quality (and clearly labeled) findings |
+| `LOCAL_VISION_URL` unset, non-raster, `!ok`, empty, or throws | Skipped per file (`localModelAnalyse()` returns `null`); falls through to cloud vision, then heuristic — never throws up to the caller |
 | Vision API call fails at runtime (bad key, rate limit) | `visionAnalyse()` catches and returns `null`, which falls through to the same heuristic path — never throws up to the caller |
 
 ## 8. Extension point — swapping in a custom model later
 
-If a custom-trained damage/injury severity classifier gets built later (discussed separately, not in scope now), the integration point is narrow and already isolated: `analyseDamage(files: EvidenceFile[]): Promise<DamageAnalysis>` in `src/lib/analyse.ts` is the entire contract. A custom model just needs to be called from inside that function (or a new function with the same signature) and return the same `{ observations, findings, confidence, limitations, usedVisionModel }` shape — nothing else in the system (tools, schema, dashboard) needs to know the difference between OpenAI, Anthropic, a heuristic, or a self-hosted model.
+If a custom-trained damage/injury severity classifier gets built later, the integration point is narrow and already isolated: `analyseDamage(files: EvidenceFile[]): Promise<DamageAnalysis>` in `src/lib/analyse.ts` is the entire contract. `LOCAL_VISION_URL` already implements this pattern (local first, fallthrough). A custom model just needs to be called from inside that function (or a new function with the same signature) and return the same `{ observations, findings, confidence, limitations, usedVisionModel, usedLocalModel, analyzer }` shape — nothing else in the system (tools, schema, dashboard) needs to know the difference between OpenAI, Anthropic, a heuristic, or a self-hosted model. `DamageFinding.source` includes `local_model`; the dashboard should render it like `vision` (model observation, preliminary).
 
 ## 9. What's deliberately not agentic
 
