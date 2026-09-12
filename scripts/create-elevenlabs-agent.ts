@@ -75,7 +75,9 @@ Voice will not connect until you:
           prompt: AGENT_PROMPT,
           llm: "gemini-2.0-flash",
           temperature: 0.3,
-          tools: clientTools(),
+          // Narrowest fix: SDK expects PromptAgentApiModelOutputToolsItem[];
+          // runtime shape unchanged, cast at boundary only.
+          tools: clientTools() as unknown as never[],
         },
       },
     },
