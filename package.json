@@ -2,6 +2,9 @@
   "name": "voice-first-motor-claims-agent",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "dev": "next dev --hostname 0.0.0.0 --port 3000",
     "build": "next build",
@@ -11,6 +14,7 @@
     "test:watch": "vitest",
     "db:push": "drizzle-kit push",
     "db:seed": "tsx src/db/seed.ts",
+    "db:release": "drizzle-kit push && tsx src/db/seed.ts",
     "db:studio": "drizzle-kit studio",
     "agent:create": "tsx scripts/create-elevenlabs-agent.ts"
   },
@@ -23,7 +27,9 @@
     "postgres": "^3.4.9",
     "react": "19.2.8",
     "react-dom": "19.2.8",
-    "zod": "^4.6.2"
+    "zod": "^4.6.2",
+    "drizzle-kit": "^0.31.10",
+    "tsx": "^4.23.13"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
@@ -31,11 +37,9 @@
     "@types/pg": "^8.23.1",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "drizzle-kit": "^0.31.10",
     "eslint": "^9",
     "eslint-config-next": "16.3.4",
     "tailwindcss": "^4",
-    "tsx": "^4.23.13",
     "typescript": "^5",
     "vitest": "^3.2.7"
   }

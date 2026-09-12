@@ -367,6 +367,18 @@ const PEOPLE = [
 
 export async function seed() {
   const db = getDb();
+  if (process.env.SEED_RESET !== "1") {
+    const already = await db
+      .select({ id: customers.id })
+      .from(customers)
+      .limit(1);
+    if (already.length > 0) {
+      console.log(
+        "Seed skipped: customers already present. Set SEED_RESET=1 to replace.",
+      );
+      return;
+    }
+  }
   await db.delete(auditEvents);
   await db.delete(assessments);
   await db.delete(evidence);

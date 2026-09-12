@@ -4,7 +4,7 @@ A voice-first AI claims employee that turns a messy customer conversation into a
 
 ## How to run
 
-This branch is a **25% backend checkpoint**: schema, persisting tools, APIs, and seeded demo claims. There is no `/call` voice UI and no officer dashboard yet. See [`docs/handoff.md`](docs/handoff.md).
+This branch has schema, persisting tools, APIs, seeded demo claims, and the officer workspace at `/claims`. There is no `/call` voice UI yet. See [`docs/handoff.md`](docs/handoff.md).
 
 ```bash
 cp .env.example .env.local
@@ -18,7 +18,7 @@ npm run dev
 
 `DATABASE_URL` in `.env.example` matches docker-compose (`postgres://claims:claims@localhost:5432/claims`). Voice (`ELEVENLABS_API_KEY`, `ELEVENLABS_AGENT_ID`) and live vision (`OPENAI_API_KEY` or `ANTHROPIC_API_KEY`) are optional for this slice. Without them, tools, APIs, and seeded claims still work; `analyse_damage` uses a labelled heuristic.
 
-After `npm run dev` (http://localhost:3000):
+After `npm run dev` (http://localhost:3000), open `/claims` for the officer inbox and `/claims/CLM-DEMO-A` for a seeded case. APIs:
 
 ```bash
 # Policy record for Maya Chen (straightforward rear-end)
@@ -36,6 +36,17 @@ curl -s -X POST http://localhost:3000/api/tools/run_triage \
 ```
 
 To register an ElevenLabs agent later (Slice 2): `npm run agent:create`, then set `ELEVENLABS_AGENT_ID`. Tools are **client** tools — the `/call` page must `POST /api/tools/{name}`; ElevenLabs will not hit the API by itself.
+
+## Deploy on Render
+
+`render.yaml` is a Blueprint: one Node web service (`next start --hostname 0.0.0.0`, honours `$PORT`) and Postgres 16. Evidence stays in Postgres — the disk is ephemeral.
+
+1. Push this branch to GitHub.
+2. In the Render dashboard: **New → Blueprint** and select this repo.
+3. Fill the optional keys when prompted (voice/vision). Leave them blank and schema, tools, seed, and `/api/health` still work.
+4. First deploy runs `npm run db:release` (schema push + seed if the database is empty). Later deploys do not wipe demo data unless you set `SEED_RESET=1`.
+
+After it is live, `GET /api/health` should return `{ ok: true }` and `GET /api/claims` should list `CLM-DEMO-A/B/C`.
 
 Locked engineering requirements: [`docs/technical-requirements.md`](docs/technical-requirements.md). Where that document and this proposal conflict, the technical requirements win.
 
