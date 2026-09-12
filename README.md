@@ -2,6 +2,41 @@
 
 A voice-first AI claims employee that turns a messy customer conversation into a structured, evidence-backed, human-ready claims case.
 
+## How to run
+
+This branch is a **25% backend checkpoint**: schema, persisting tools, APIs, and seeded demo claims. There is no `/call` voice UI and no officer dashboard yet. See [`docs/handoff.md`](docs/handoff.md).
+
+```bash
+cp .env.example .env.local
+docker compose up -d
+npm i
+npm run db:push
+npm run db:seed
+npm test
+npm run dev
+```
+
+`DATABASE_URL` in `.env.example` matches docker-compose (`postgres://claims:claims@localhost:5432/claims`). Voice (`ELEVENLABS_API_KEY`, `ELEVENLABS_AGENT_ID`) and live vision (`OPENAI_API_KEY` or `ANTHROPIC_API_KEY`) are optional for this slice. Without them, tools, APIs, and seeded claims still work; `analyse_damage` uses a labelled heuristic.
+
+After `npm run dev` (http://localhost:3000):
+
+```bash
+# Policy record for Maya Chen (straightforward rear-end)
+curl -s -X POST http://localhost:3000/api/tools/get_policy \
+  -H 'Content-Type: application/json' \
+  -d '{"policy_id":"POL-1001"}'
+
+# Seeded claims inbox
+curl -s http://localhost:3000/api/claims
+
+# Injury scenario must route urgent
+curl -s -X POST http://localhost:3000/api/tools/run_triage \
+  -H 'Content-Type: application/json' \
+  -d '{"claim_id":"CLM-DEMO-C"}'
+```
+
+To register an ElevenLabs agent later (Slice 2): `npm run agent:create`, then set `ELEVENLABS_AGENT_ID`. Tools are **client** tools — the `/call` page must `POST /api/tools/{name}`; ElevenLabs will not hit the API by itself.
+
 ---
 
 **FORWARD 2026 — AI Claims Agent**
