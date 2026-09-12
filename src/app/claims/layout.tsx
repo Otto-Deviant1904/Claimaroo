@@ -16,7 +16,12 @@ export default function ClaimsLayout({
     <div className="claims-shell">
       <header className="site-header">
         <Link href="/claims">Officer workspace</Link>
-        <span>Live backend · Vehicle claims</span>
+        <div className="site-header-end">
+          <Link className="secondary" href="/">
+            Home
+          </Link>
+          <span>Live backend · Vehicle claims</span>
+        </div>
       </header>
       {children}
       <footer className="site-footer">
