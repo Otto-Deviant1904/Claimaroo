@@ -15,6 +15,7 @@ export async function GET() {
     elevenlabsKey,
     agentId,
     llm: openai ? "openai" : anthropic ? "anthropic" : null,
+    localVision: Boolean(process.env.LOCAL_VISION_URL?.trim()),
     database,
   });
 }
