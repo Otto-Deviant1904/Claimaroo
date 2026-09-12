@@ -4,6 +4,7 @@ import { getDb } from "@/db";
 import { claims } from "@/db/schema";
 import { recordAudit } from "@/lib/audit";
 import { executeTool } from "@/lib/tools";
+import { corsPreflight, withCors } from "@/lib/cors";
 
 const ACTIONS = [
   "approve_next_stage",
@@ -13,6 +14,10 @@ const ACTIONS = [
 ] as const;
 
 type Action = (typeof ACTIONS)[number];
+
+export function OPTIONS() {
+  return corsPreflight();
+}
 
 export async function POST(
   request: Request,
@@ -27,7 +32,7 @@ export async function POST(
   };
   const action = body.action as Action | undefined;
   if (!action || !ACTIONS.includes(action)) {
-    return NextResponse.json({ error: "Unknown action" }, { status: 400 });
+    return withCors(NextResponse.json({ error: "Unknown action" }, { status: 400 }));
   }
 
   const db = getDb();
@@ -39,7 +44,7 @@ export async function POST(
       { claim_id: id, reason: note ?? "Officer escalated" },
       { actor: "officer" },
     );
-    return NextResponse.json({ ok: true, result });
+    return withCors(NextResponse.json({ ok: true, result }));
   }
 
   const patch: Record<string, unknown> = {
@@ -74,5 +79,5 @@ export async function POST(
     result: patch,
   });
 
-  return NextResponse.json({ ok: true, action, claimId: id });
+  return withCors(NextResponse.json({ ok: true, action, claimId: id }));
 }
