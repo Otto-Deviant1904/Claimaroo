@@ -11,11 +11,16 @@ export default function Home() {
           AI Claims Agent
         </h1>
         <p className="text-lg text-zinc-600">
-          25% backend checkpoint. Schema, persisting tools, APIs, and seeded
-          claims. No voice widget and no officer dashboard on this slice.
+          Schema, persisting tools, APIs, seeded claims, and the officer
+          workspace. Voice call UI is still a later slice.
         </p>
       </div>
       <ul className="flex flex-col gap-2 text-base">
+        <li>
+          <Link className="underline underline-offset-4" href="/claims">
+            /claims (officer workspace)
+          </Link>
+        </li>
         <li>
           <Link className="underline underline-offset-4" href="/api/health">
             /api/health

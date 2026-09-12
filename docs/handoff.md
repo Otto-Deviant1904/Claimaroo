@@ -4,7 +4,7 @@ Open this file before adding UI. Branch: `cursor/ai-claims-agent-prototype-049c`
 
 ## What this 25% includes
 
-Backend loop only. Tools persist to Postgres. Home is a status page. No customer call UI, no officer workspace.
+Backend loop plus officer workspace at `/claims`. Tools persist to Postgres. Home is a status page. No customer call UI yet.
 
 - Drizzle schema: customers, policies, claims, evidence (bytes in Postgres), assessments, audit events
 - Seed: 15 synthetic policyholders; demo claims `CLM-DEMO-A` / `B` / `C`
@@ -29,6 +29,10 @@ Backend loop only. Tools persist to Postgres. Home is a status page. No customer
 | `src/lib/demo.ts` | Demo scripts + ElevenLabs tool parameter schema |
 | `src/lib/agent-prompt.ts` | Prompt used by `npm run agent:create` |
 | `src/app/api/tools/[name]/route.ts` | Tool HTTP entry |
+| `src/app/claims/` | Officer inbox and case pages |
+| `src/components/claims/` | Inbox table, case workspace, damage map |
+| `src/lib/claim-view.ts` | Officer labels, formatters, damage-zone map |
+| `src/lib/to-claim-view.ts` | Case-pack → officer view model (server only) |
 | `src/app/api/claims/` | List, case pack, officer actions |
 | `src/app/api/evidence/` | `POST` upload, `GET …/file` |
 | `src/app/api/conversation/signed-url/route.ts` | Private-agent start (Slice 2) |
@@ -68,12 +72,7 @@ Work in this order. Do not skip to a pretty dashboard before voice can execute t
 
 ### Slice 3 — officer workspace (README section 12)
 
-Against APIs that already exist. No new backend required for the first paint.
-
-- `/claims` from `GET /api/claims`
-- `/claims/[id]` from `GET /api/claims/[id]` (`loadCasePack`): header, incident, coverage, evidence, assessment, risk, recommended action, officer actions, audit
-- Actions: `POST /api/claims/[id]/actions` (`approve_next_stage`, `request_information`, `escalate`, `override`)
-- Seeded A/B/C must be openable without a live call
+Done in `src/app/claims/` (inbox + `/claims/[id]`). Seeded A/B/C open without a live call. Actions still POST to `/api/claims/[id]/actions`.
 
 ### Slice 4 — evidence UI, live vision, polish
 

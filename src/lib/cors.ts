@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
 
-// Local-demo CORS for the static officer dashboard in
-// `chatgpt-claims-dashboard/` (served on another port via plain http.server).
-// Synthetic demo data only; keep permissive for the prototype.
+// Permissive CORS for the prototype APIs. The officer workspace is now
+// same-origin at /claims; this remains for local tooling and curl demos.
 export const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
