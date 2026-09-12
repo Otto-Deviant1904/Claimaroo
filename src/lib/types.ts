@@ -66,7 +66,7 @@ export type DamageFinding = {
   area: string;
   observation: string;
   severity: "minor" | "moderate" | "severe" | "unknown";
-  source: "vision" | "heuristic" | "customer";
+  source: "vision" | "heuristic" | "customer" | "local_model";
 };
 
 export type CoverageCheckResult = {

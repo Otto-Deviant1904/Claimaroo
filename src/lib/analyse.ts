@@ -7,12 +7,16 @@ export type EvidenceFile = {
   bytes: Buffer | null;
 };
 
+export type AnalyzerKind = "local_model" | "vision" | "heuristic";
+
 export type DamageAnalysis = {
   observations: string[];
   findings: DamageFinding[];
   confidence: ConfidenceLevel;
   limitations: string;
   usedVisionModel: boolean;
+  usedLocalModel: boolean;
+  analyzer: AnalyzerKind;
 };
 
 function heuristicFromFilename(filename: string): DamageFinding[] {
@@ -59,6 +63,71 @@ function heuristicFromFilename(filename: string): DamageFinding[] {
   return findings;
 }
 
+function isRasterImage(mime: string) {
+  return mime.startsWith("image/") && !mime.includes("svg");
+}
+
+type LocalModelResponse = {
+  observations?: string[];
+  findings?: {
+    area?: string;
+    observation?: string;
+    severity?: DamageFinding["severity"];
+  }[];
+};
+
+async function localModelAnalyse(file: EvidenceFile): Promise<DamageAnalysis | null> {
+  const url = process.env.LOCAL_VISION_URL?.trim();
+  if (!url) return null;
+  if (!file.bytes || !isRasterImage(file.mimeType)) return null;
+
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        filename: file.filename,
+        mime_type: file.mimeType,
+        image_base64: file.bytes.toString("base64"),
+      }),
+      signal: AbortSignal.timeout(8_000),
+    });
+    if (!res.ok) return null;
+    const json = (await res.json()) as LocalModelResponse;
+    const observations = (json.observations ?? [])
+      .map((o) => o.trim())
+      .filter(Boolean);
+    const findings: DamageFinding[] = (json.findings ?? []).map((f) => ({
+      area: f.area?.trim() || "observed",
+      observation: f.observation?.trim() || "Local model returned an unlabeled finding.",
+      severity: f.severity ?? "unknown",
+      source: "local_model",
+    }));
+    if (findings.length === 0 && observations.length === 0) return null;
+    return {
+      observations: observations.length
+        ? observations
+        : findings.map((f) => f.observation),
+      findings: findings.length
+        ? findings
+        : observations.map((observation) => ({
+            area: "observed",
+            observation,
+            severity: "unknown" as const,
+            source: "local_model" as const,
+          })),
+      confidence: "medium",
+      limitations:
+        "Findings came from a local damage model. Lighting, angle, and concealment can hide damage. Not a repairer inspection. Preliminary, not binding.",
+      usedVisionModel: false,
+      usedLocalModel: true,
+      analyzer: "local_model",
+    };
+  } catch {
+    return null;
+  }
+}
+
 async function visionAnalyse(file: EvidenceFile): Promise<string | null> {
   const provider =
     process.env.LLM_PROVIDER ||
@@ -70,7 +139,7 @@ async function visionAnalyse(file: EvidenceFile): Promise<string | null> {
   if (!provider) return null;
   if (!file.bytes) return null;
   const mime = file.mimeType;
-  if (!mime.startsWith("image/") || mime.includes("svg")) return null;
+  if (!isRasterImage(mime)) return null;
   const b64 = file.bytes.toString("base64");
 
   const instruction =
@@ -170,6 +239,24 @@ function findingsFromVisionText(text: string): DamageFinding[] {
   });
 }
 
+function heuristicAnalysis(files: EvidenceFile[]): DamageAnalysis {
+  const findings = files.flatMap((f) => heuristicFromFilename(f.filename));
+  return {
+    observations: findings.map((f) => f.observation),
+    findings,
+    confidence: "low",
+    limitations:
+      "No local model and no OPENAI_API_KEY or ANTHROPIC_API_KEY was available (or the file is not a raster image), so analysis used filename/label heuristics only. A claims officer must inspect the actual file. Preliminary, not binding.",
+    usedVisionModel: false,
+    usedLocalModel: false,
+    analyzer: "heuristic",
+  };
+}
+
+/**
+ * Isolated contract for damage analysis. Swap in a custom/local classifier
+ * by setting LOCAL_VISION_URL or by changing only this module.
+ */
 export async function analyseDamage(files: EvidenceFile[]): Promise<DamageAnalysis> {
   if (files.length === 0) {
     return {
@@ -179,7 +266,14 @@ export async function analyseDamage(files: EvidenceFile[]): Promise<DamageAnalys
       limitations:
         "No evidence files were supplied. Analysis cannot run. This is not a damage finding.",
       usedVisionModel: false,
+      usedLocalModel: false,
+      analyzer: "heuristic",
     };
+  }
+
+  for (const file of files) {
+    const local = await localModelAnalyse(file);
+    if (local) return local;
   }
 
   const visionNotes: string[] = [];
@@ -203,16 +297,10 @@ export async function analyseDamage(files: EvidenceFile[]): Promise<DamageAnalys
       limitations:
         "Vision output is a model observation of uploaded pixels only. Lighting, angle, and concealment can hide damage. Not a repairer inspection. Preliminary.",
       usedVisionModel: true,
+      usedLocalModel: false,
+      analyzer: "vision",
     };
   }
 
-  const findings = files.flatMap((f) => heuristicFromFilename(f.filename));
-  return {
-    observations: findings.map((f) => f.observation),
-    findings,
-    confidence: "low",
-    limitations:
-      "No OPENAI_API_KEY or ANTHROPIC_API_KEY was available (or the file is not a raster image), so analysis used filename/label heuristics only. A claims officer must inspect the actual file. Preliminary, not binding.",
-    usedVisionModel: false,
-  };
+  return heuristicAnalysis(files);
 }

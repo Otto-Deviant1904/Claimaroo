@@ -378,6 +378,8 @@ async function analyseDamageTool(input: Record<string, unknown>) {
     confidence: analysis.confidence,
     limitations: analysis.limitations,
     used_vision_model: analysis.usedVisionModel,
+    used_local_model: analysis.usedLocalModel,
+    analyzer: analysis.analyzer,
     label: "preliminary",
   };
 }
