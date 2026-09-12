@@ -179,7 +179,7 @@ Every `executeTool` call writes one `audit_events` row. MUST keep that behaviour
 | `ConfidenceLevel` | `high`, `medium`, `low` |
 | `CoverageType` | `comprehensive`, `third_party`, `third_party_fire_theft` |
 | `DamageFinding.severity` | `minor`, `moderate`, `severe`, `unknown` |
-| `DamageFinding.source` | `vision`, `heuristic`, `customer` |
+| `DamageFinding.source` | `vision`, `heuristic`, `customer`, `local_model` |
 
 `StructuredFacts` keys (all optional / nullable): `injuries`, `injuryDescription`, `emergencyServices`, `immediateDanger`, `otherVehicles`, `otherPartyDetails`, `atFaultStatement`, `conflictingAccounts`, `conflictNotes`, `weather`, `policeNotified`, `passengers`, `airbagsDeployed`, `vehicleDrivable`, `incidentType`.
 
@@ -211,7 +211,7 @@ Coverage and estimate outputs MUST include a non-binding label:
 | `create_claim` | Write | **required** `customer_id`, `policy_id`; optional `incident_time`, `location`, `narrative`, `structured_facts`, `conversation_id` | `{ claimId, status: "intake", message }` |
 | `update_claim` | Write | **required** `claim_id`; optional incident/location/narrative/`structured_facts` (merged) | `{ claimId, updated: true, structured_facts }` |
 | `attach_evidence` | Write | **required** `claim_id`; `evidence_id` | `{ attached: true, evidenceId, file_url }` or `{ attached: false, message }` if no id |
-| `analyse_damage` | Write | **required** `claim_id`; optional `evidence_ids` | `{ observations, findings, confidence, limitations, used_vision_model, label: "preliminary" }` |
+| `analyse_damage` | Write | **required** `claim_id`; optional `evidence_ids` | `{ observations, findings, confidence, limitations, used_vision_model, used_local_model, analyzer: "local_model" \| "vision" \| "heuristic", label: "preliminary" }` — local model first via `LOCAL_VISION_URL`, then cloud vision, then heuristic; failures fall through, never throw |
 | `run_coverage_check` | Write | **required** `claim_id` | `{ claimId, status, label: "preliminary", binding: false, ruleReferences, notes }` |
 | `run_triage` | Write | **required** `claim_id` | `{ claimId, status, route, reason, flags, recommendedAction }` |
 | `estimate_repair` | Write | **required** `claim_id` | `{ estimate_low_cents, estimate_high_cents, currency: "AUD", label, assumptions, binding: false, message }` |
@@ -311,7 +311,7 @@ If the claim status is `intake`, it becomes `awaiting_evidence`. Bytes stored in
 
 ### `GET /api/status`
 
-`src/app/api/status/route.ts` — **200** `{ elevenlabs, elevenlabsKey, agentId, llm, database }` booleans / `llm` is `"openai"` \| `"anthropic"` \| `null`.
+`src/app/api/status/route.ts` — **200** `{ elevenlabs, elevenlabsKey, agentId, llm, localVision, database }` booleans / `llm` is `"openai"` \| `"anthropic"` \| `null` / `localVision` is `Boolean(LOCAL_VISION_URL)`.
 
 ---
 
@@ -354,9 +354,10 @@ Names locked. File: `.env.example`. Next.js loads `.env.local`.
 | `OPENAI_API_KEY` | optional | optional | optional | SHOULD for live vision | Default provider |
 | `ANTHROPIC_API_KEY` | optional | optional | optional | MAY | Used when `LLM_PROVIDER=anthropic` or OpenAI unset |
 | `LLM_PROVIDER` | optional | optional | optional | optional | `openai` \| `anthropic`. Default: openai if that key exists, else anthropic (`src/lib/analyse.ts`) |
+| `LOCAL_VISION_URL` | optional | optional | optional | optional | POST `{ filename, mime_type, image_base64 }`, 8s timeout. If set, `analyse_damage` tries local model first; on failure falls through to cloud vision, then heuristic. Missing MUST NOT block. |
 | `PORT` | Render | Render | Render | Render | Not in `.env.example`; Next.js `start` binds `0.0.0.0` and honours `PORT` |
 
-Missing ElevenLabs or LLM keys MUST NOT block schema, tools, APIs, seed, or the officer UI. `analyse_damage` falls back to labelled filename heuristics.
+Missing ElevenLabs, LLM, or `LOCAL_VISION_URL` keys MUST NOT block schema, tools, APIs, seed, or the officer UI. `analyse_damage` falls back to labelled filename heuristics.
 
 ---
 
