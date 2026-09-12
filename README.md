@@ -1,345 +1,417 @@
-# Voice-First-Motor-Claims-Intake-FNOL-with-Photo-Verification
-A voice AI agent that takes First Notice of Loss (FNOL) for motor vehicle collision claims over the phone, extracts structured claim data in real time, accepts a damage photo from the claimant after the call, and cross-checks what was said against what the photo shows. Uncertain or contradictory information is flagged for human review.
+# Voice-First Motor Claims Agent
+
+A voice-first AI claims employee that turns a messy customer conversation into a structured, evidence-backed, human-ready claims case.
 
 ---
 
-# Product Requirements Document
+**FORWARD 2026 — AI Claims Agent**
 
-**Voice-First Motor Claims Intake (FNOL) with Photo Verification**
+*From first conversation to a decision-ready claim.*
 
-- **Event:** Forward — AI in Business Hackathon
-- **Track:** Track 1 — Improve an Existing Business Capability
-- **Special Track:** Built With ElevenLabs
-- **Build window:** 48 hours
-- **Version:** 3.0
+A 48-hour prototype proposal for the Forward AI in Business Hackathon.
 
-## 1. Summary
-
-A voice AI agent that takes First Notice of Loss (FNOL) for motor vehicle collision claims over the phone, extracts structured claim data in real time, accepts a damage photo from the claimant after the call, and cross-checks what was said against what the photo shows. Uncertain or contradictory information is flagged for human review. The adjuster receives a completed, verified claim record instead of a raw call recording.
-
-The agent does not assess, decide, or settle. It replaces the 6–7 minutes of manual data capture that currently sits in front of the adjuster's actual work. As an optional extension, the system can surface coverage and cost indicators to help an adjuster triage faster — framed explicitly as suggestions, never determinations.
-
-## 2. Track alignment
-
-**Track 1: Improve an Existing Business Capability.**
-
-FNOL intake is not a new capability — every general insurer already does it, at scale, every day. What we improve is how it is done:
-
-| | Today | With this system |
-|---|---|---|
-| Channel | Human call centre agent | Voice AI agent, 24/7 |
-| Output | Free-text notes + recording, manually keyed into the claims system | Structured, validated claim record |
-| Availability | Business hours + limited after-hours staffing | Always on, scales during high-volume events |
-| Verification | Photos reviewed manually, later, by an adjuster | Photo cross-checked against the verbal account at intake |
-| Quality signal | None until an adjuster opens the file | Confidence + conflict flags at intake |
-| Triage | Adjuster reads the whole file to gauge complexity | Coverage/cost indicators pre-surfaced (optional) |
-
-**Special Track alignment:** ElevenLabs Conversational AI is the core intake channel, integrated via SDK (not the no-code console) for dynamic per-turn context injection, function calling, and interruption handling. Remove the voice layer and there is no product.
-
-## 3. Market context
-
-This space is active, and the pitch should acknowledge that rather than claim novelty.
-
-- **IAG × OpenAI (announced July 2026)** — customer-facing agentic voice for claims using OpenAI Presence, initially scoped to natural perils. Delivery expected H1 FY27. Closest comparable to this project.
-- **Allianz "Project Nemo" (launched July 2025, Australia)** — seven specialised agents (Planner, Coverage, Weather, Fraud, Payout, Audit) automating food spoilage claims under AUD $500. 80% reduction in processing/settlement time; built in under 100 days. Critically, a human claims professional always makes the final payout decision. Allianz has stated it is extending the framework to motor lines.
-- **IAG CASI** (Gen-AI claims assistant, ~500 intermediated claims staff since 2024) and **Crunchwork** (property claims workflow platform, adopted early 2026) — both staff-facing, not customer-facing voice.
-- **Suncorp** — current tooling oriented to internal staff support and back-end automation.
-
-**Where this project sits:** Nemo automates assessment of an already-submitted, low-complexity claim. This project improves intake of a higher-complexity one, with an optional lightweight step toward triage support. Even Nemo — automating a $500 food spoilage claim — keeps a human as sole payout authority; motor liability is a harder problem than food spoilage, and this project deliberately does not attempt it.
-
-## 4. Business case
-
-### Problem
-
-- The initial FNOL call averages 6–7 minutes, with repeat calls frequently needed to collect information missed the first time.
-- 85–95% of claims still go through a call centre despite years of digital investment.
-- 47% of insurance enquiries occur outside standard business hours — many incidents queue overnight.
-- Incomplete FNOL data is a leading cause of extended cycle times, rework, and leakage.
-
-### Opportunity
-
-- Auto customers acknowledged within 1 hour of FNOL are 80% less likely to complain.
-- McKinsey research indicates digitised claims processes can cut handling costs up to 30%.
-- Industry-wide straight-through processing sits below 10%; leading carriers reach ~35%. Clean structured capture at FNOL is the precondition.
-- Average auto claim cycle time is 15–30 days; carriers at the low end share one trait — machine-readable data captured at FNOL.
-
-### Value proposition
-
-1. **Time** — intake handled without a human agent; adjuster receives a populated record.
-2. **Availability** — after-hours and surge incidents captured immediately.
-3. **Data quality** — required fields enforced at capture; contradictions flagged, not silently accepted.
-4. **Verification** — photo evidence checked against the verbal account before an adjuster opens the file.
-5. **Triage** — urgency (injury, vehicle undriveable) and, optionally, coverage/cost indicators surfaced at intake.
-
-## 5. Scope
-
-### 5.1 In scope
-
-**Line of business:** Motor vehicle collision claims only. Highest volume, tightest standardised field set, no property valuation or contractor coordination. Depth over breadth.
-
-**Capabilities:**
-
-1. Inbound voice conversation handled end to end by an ElevenLabs Conversational AI agent
-2. Real-time extraction of motor FNOL fields from the live transcript
-3. Server-side dialogue state tracking — filled, missing, and uncertain fields
-4. Dynamic question generation — the agent asks for what is genuinely still missing
-5. Per-field confidence scoring and contradiction detection
-6. Quote grounding — extracted values carry the verbatim source text
-7. Post-call photo upload of vehicle damage
-8. Damage severity classification from the photo
-9. Cross-modal consistency check — verbal account vs. photo evidence
-10. Escalation flagging for uncertainty or conflict
-11. Adjuster dashboard: structured claim, transcript, photo, flags
-12. Offline evaluation harness
-13. (Optional) Coverage indicator against a mocked policy
-14. (Optional) Rough repair cost band from photo severity
-
-### 5.2 Out of scope
-
-- Any claim type other than motor collision
-- Claim assessment, liability determination, settlement
-- Fault/liability determination of any kind — including partial or contributory fault
-- Payout calculation or settlement figures
-- Integration with a real policy administration or claims system (mocked lookup only)
-- Real customer data of any kind
-- Payments, repairer allocation, towing dispatch
-- Identity verification beyond stated policy number
-- Real SMS delivery (demo uses an on-screen link/QR code)
-- Multi-photo galleries, video, or telematics input
-- Native mobile app
-
-### 5.3 Non-goals
-
-- Not an autonomous claims handler. Every claim lands with a human.
-- Not a fraud detection product. Inconsistency is flagged for attention, never alleged as dishonesty.
-- Not a general-purpose insurance chatbot.
-- Not a liability or fault-determination system, in any form.
-- Not a settlement or payout calculator. Coverage and cost outputs (if built) are labelled recommendations, never decisions.
-
-## 6. Users
-
-**Primary — the claimant.** Has just had a collision. Possibly shaken, possibly roadside, possibly at 11pm. Wants to report it, know it is lodged, and know what happens next. Will not tolerate a long IVR tree or a web form.
-
-**Secondary — the claims adjuster.** Opens the file later. Wants complete, trustworthy data and a clear signal about what needs checking — not a 7-minute recording to listen through.
-
-## 7. Functional requirements
-
-### 7.1 Claim schema
-
-| Field | Type | Required | Critical | Source |
-|---|---|---|---|---|
-| `policy_number` | string | Yes | — | Voice |
-| `driver_name` | string | Yes | — | Voice |
-| `incident_datetime` | datetime | Yes | Yes | Voice |
-| `location` | string | Yes | — | Voice |
-| `collision_type` | enum (rear-end / intersection / parked / single-vehicle / other) | Yes | — | Voice |
-| `other_vehicle_involved` | bool + optional rego | Yes | — | Voice |
-| `injuries` | bool + severity | Yes | Yes | Voice |
-| `vehicle_driveable` | bool | Yes | Yes | Voice |
-| `fault_admission` | string (claimant's own words) | No | Yes | Voice |
-| `witnesses` | bool | No | — | Voice |
-| `photos_taken` | bool | No | — | Voice |
-| `photo_damage_severity` | enum (minor / moderate / severe) | No | — | Photo |
-| `photo_damage_location` | string | No | — | Photo |
-| `verbal_photo_consistency` | bool | No | Yes | Derived |
-| `coverage_indicator` (optional) | enum (appears_covered / needs_review) | No | — | Derived (rules) |
-| `estimated_repair_cost_band` (optional) | enum (low / medium / high) | No | — | Derived (lookup) |
-
-### 7.2 Field state object
-
-Every field carries:
-
-```json
-{
-  "value": null,
-  "confidence": 0.0,
-  "source_quote": null,
-  "turns_asked": 0,
-  "conflict": false
-}
-```
-
-### 7.3 Dialogue state tracking loop
-
-1. ElevenLabs webhook delivers the finalised transcript for a completed turn
-2. LLM call with function calling extracts fields present, each with confidence and verbatim source quote
-3. Merge into state:
-   - Field empty → write value
-   - New confidence ≥ existing → overwrite
-   - New value conflicts with existing high-confidence value → set `conflict = true`, retain both
-4. Compute remaining required fields
-5. Select next question: highest-priority missing required field, or a targeted re-ask where `turns_asked >= 2` and confidence remains low
-6. Inject the generated question into the agent's context for the next turn
-
-**Note:** quotes must be taken from the finalised per-turn transcript, never the interim streaming hypothesis — STT revises partial output as more audio arrives.
-
-### 7.4 Quote grounding
-
-Interpretive fields (`fault_admission`, `injuries`, `collision_type`) store the verbatim claimant utterance alongside the classified value. Rationale:
-
-- **Defensibility** — paraphrasing a fault admission is an interpretive leap the system should not make unilaterally
-- **Hallucination control** — a value that cannot be grounded in an actual transcript span is itself a low-confidence signal
-- **Auditability** — the adjuster can click a field and see the exact words behind it
-
-Identity fields (`policy_number`, `driver_name`, dates) do not require quote grounding.
-
-### 7.5 Photo capture and cross-modal check
-
-Photos cannot arrive mid-call (audio channel only). Flow:
-
-```
-Call concludes → upload link surfaced (on-screen link/QR for demo)
-→ claimant uploads one photo → severity classified
-→ merged into the same claim state object
-```
-
-**Consistency check:** compare `photo_damage_location` against `collision_type` from the voice conversation. A rear-end claim showing front-end damage sets `verbal_photo_consistency = false` and triggers escalation through the existing conflict logic.
-
-### 7.6 Confidence and escalation
-
-- Critical field below 0.6 confidence → `escalate = true`
-- Any field with `conflict = true` → `escalate = true`
-- `verbal_photo_consistency = false` → `escalate = true`
-- Escalation reason is stated explicitly (which field, what conflict) — never a generic "needs review" badge
-
-### 7.7 Adjuster dashboard
-
-- Structured claim record, fields colour-coded by confidence
-- Live/complete transcript alongside
-- Uploaded photo with classified severity and location
-- Escalation panel listing specific low-confidence fields and detected conflicts
-- Click-through from any grounded field to its source quote
-- Call metadata: duration, timestamp, completion state
-- (Optional) Coverage and cost band indicators, visually distinct from confirmed data — different colour/style, prefixed "Suggested:", never presented as fact
-
-### 7.8 Evaluation harness
-
-Runs independently of the voice layer — synthetic transcripts fed directly into the extraction pipeline as text, isolating reasoning-layer failures from speech-recognition failures.
-
-Reports:
-
-- Per-field extraction accuracy vs. hand-labelled ground truth
-- Required-field completion rate
-- Average per-turn latency
-- Estimated cost per call
-- Photo classifier accuracy on a held-out set
-- Build-vs-buy comparison: trained classifier vs. zero-shot vision model on the same test images (accuracy, latency, cost)
-
-### 7.9 Coverage and cost indicators (optional, Tier 5)
-
-Two lightweight, rules-based additions — not model-driven decisions:
-
-- **Coverage indicator:** checks the stated policy number against a small mocked policy table (covers collision: y/n, excess period active: y/n). Outputs `appears_covered` or `needs_review`. Pure lookup logic, no inference.
-- **Repair cost band:** maps `photo_damage_severity` to a pre-set cost range (e.g. minor → $500–$2,000, moderate → $2,000–$8,000, severe → $8,000+) via a static lookup table, not a generated dollar figure.
-
-**Hard constraints on this section:**
-
-- Field names, UI labels, and any spoken/written description must use "indicator," "suggested," or "estimate" — never "decision," "approval," or "assessment"
-- Neither output may influence escalation logic, routing, or any downstream automated action — they are read-only signals for a human
-- If time-constrained, this entire section is the first thing to cut
-
-## 8. Technical approach and key decisions
-
-**Voice layer:** ElevenLabs Conversational AI Agents via SDK, for dynamic per-turn context injection and programmatic function-call schema definition.
-
-**Transcript extraction:** LLM with function calling, returning field values, confidence, and source quotes.
-
-**Why not train a transcript classifier?** Public insurance datasets are structured tabular records (claim amount, prior claims, demographics) and do not match free-text conversational transcript input — a model trained on them would not transfer. No labelled corpus of real motor FNOL transcripts is obtainable in the window. Few-shot prompted extraction is faster, more reliable, and inspectable.
-
-**Why train a photo classifier?** Different situation entirely. Purpose-built labelled datasets exist (Car Damage Severity Dataset, VehiDE, and others on Kaggle), the task is a standard image classification problem, and transfer learning makes it tractable in hours. Prior open-source work on this exact task reached roughly 79% accuracy on damage location and 71% on severity using transfer learning on a pretrained backbone.
-
-**Approach:** freeze a pretrained backbone (MobileNetV2 or ResNet18), fine-tune the classification head on a severity-labelled dataset. Colab free GPU tier is sufficient. Hard time-box; fall back to a zero-shot vision model call if it does not converge cleanly.
-
-**Coverage and cost indicators:** deliberately rules-based, not model-based — static lookup tables, no LLM or trained model in this path. Keeps the "recommendation, not decision" boundary structurally enforced rather than relying on prompting or UI copy alone.
-
-**Test data:** 6–8 hand-written synthetic motor collision transcripts with hand-labelled ground truth JSON — clean, vague, contradictory timeline, multiple fields in one utterance, high-urgency injury, off-script/rambling. Plus a small held-out set of damage photos.
-
-## 9. Task breakdown — easiest to hardest
-
-### Tier 1 — Foundational (do first, low risk)
-
-1. **Define the claim schema in code** — the field list, types, enums, required/critical designations. Everything else depends on this existing.
-2. **Write 6–8 synthetic transcripts** — plain text, covering the scenario spread above. No code required.
-3. **Hand-label ground truth JSON** for each transcript. Tedious but trivial, and unblocks all evaluation.
-4. **Repo, environment, and API key setup** — ElevenLabs, LLM provider, database.
-5. **Database schema and storage layer** — claims table, field state as JSON, transcript storage.
-
-### Tier 2 — Core build (the working spine)
-
-6. **Single-shot extraction function** — transcript text in, structured fields out via function calling. Test against the synthetic transcripts only; no voice yet.
-7. **Add confidence scoring and quote grounding** to the extraction output. Incremental change to the same function.
-8. **Basic ElevenLabs agent** — static prompt, completes a call, delivers transcript. No dynamic questioning yet.
-9. **Webhook receiver** — accepts finalised turn transcripts from ElevenLabs, writes to storage.
-10. **Dashboard shell** — displays a stored claim record and transcript. Static read, no live updates.
-
-### Tier 3 — The differentiating layer
-
-11. **State merge logic** — fill/overwrite/conflict rules across turns. First genuinely non-trivial piece.
-12. **Missing-field computation and question selection** — which field to ask for next, and when to re-ask.
-13. **Dynamic context injection** — feed the generated question back into the agent for the next turn. Closes the loop; this is the technical core of the project.
-14. **Escalation logic** — thresholds, conflict triggers, explicit reason strings.
-15. **End-to-end integration** — live call flowing through to a populated dashboard. Expect this to take longer than estimated.
-
-### Tier 4 — Depth and evidence
-
-16. **Evaluation harness** — automated run over synthetic transcripts, accuracy/latency/cost reporting.
-17. **Photo upload flow** — link/QR, upload endpoint, storage, dashboard display.
-18. **Zero-shot vision classification of the photo** (fast path — gets the feature working before any training).
-19. **Cross-modal consistency check** — photo damage location vs. verbal collision type.
-20. **Train the damage severity classifier** — dataset acquisition, transfer learning, evaluation. Hard time-box.
-21. **Build-vs-buy comparison** — trained classifier vs. zero-shot vision on held-out images.
-
-### Tier 5 — Polish and optional extensions (only if genuinely ahead)
-
-22. **Interruption/turn-taking tuning** — agent yields when the claimant speaks over it.
-23. **Mocked policy lookup** validating the stated policy number.
-24. **Coverage indicator** — rules-based check against the mocked policy, labelled as a suggestion.
-25. **Repair cost band** — static lookup from photo severity, labelled as an estimate.
-26. **Multilingual intake** (Cantonese / Mandarin).
-
-**Sequencing note:** Tiers 1–3 constitute a complete, demonstrable product. Everything from Tier 4 onward is additive on top of a system that already works. If time runs short, a clean Tier 3 demo beats a half-broken Tier 4 or 5 one — and Tier 5's coverage/cost indicators are the first thing to drop if the schedule slips.
-
-## 10. Success criteria
-
-**Must have (demo-critical):**
-
-- Live call completes end to end: voice → extraction → state → dashboard
-- Agent asks for missing fields dynamically rather than reading a fixed script
-- At least one escalation flag demonstrably triggered by conflicting or uncertain input
-- Evaluation harness produces real measured numbers
-
-**Should have:**
-
-- Contradiction detection across non-adjacent turns
-- Photo upload and cross-modal consistency check working
-- Trained damage classifier with build-vs-buy comparison
-
-**Could have:**
-
-- Interruption handling tuned
-- Multilingual intake
-- Coverage indicator and repair cost band, clearly labelled as suggestions
-
-**Demo success:** a judge can interrupt the scripted flow — give a vague answer, contradict themselves, upload a photo that does not match their account — and watch the system notice and respond appropriately.
-
-## 11. Risks
-
-| Risk | Mitigation |
+| Submission | Positioning |
 |---|---|
-| Live demo fails (network, latency, mic) | Pre-recorded backup video; eval numbers stand independently of a live call |
-| Per-turn LLM latency breaks conversational feel | Extraction runs async; agent acknowledges while processing |
-| Photo classifier fails to converge in the time box | Zero-shot vision fallback already built at Tier 4 step 18 |
-| Scope creep into other claim types | Motor-only is a locked constraint, not a starting point |
-| Over-flagging (everything escalates) | Tune thresholds against the eval set, not by feel |
-| Integration takes longer than expected | Tiers 1–3 deliberately sequenced to produce a working demo before any Tier 4/5 work begins |
-| Coverage/cost indicator misread as a determination | Rules-based (not model-based) implementation, explicit "suggested/estimate" labelling everywhere, no influence on escalation or routing |
+| Primary track | Track 2 — Create a New Business Capability |
+| Additional entry | Special Track — Built With ElevenLabs |
+| Core interface | Natural voice conversation |
+| Core product | Agentic claims orchestration + human handoff |
+| Primary demo | Motor vehicle accident claim |
+| Build constraint | Convincing end-to-end prototype in 48 hours |
 
-## 12. Ethical and governance considerations
+> Core thesis: We are not building an insurance chatbot. We are prototyping an AI employee that turns a messy customer interaction into structured work, evidence, analysis, and a human-ready claims case.
 
-- **Human in the loop by design.** The system never closes, denies, or assesses a claim. This mirrors the governance benchmark set by Allianz's Nemo, where a claims professional retains final payout authority even on a $500 automated claim.
-- **No fraud allegations.** Inconsistency flags route for human review and are framed as such. An inconsistent account is not evidence of dishonesty — distressed claimants frequently give one.
-- **Disclosure.** The agent identifies itself as an AI assistant at call open.
-- **Escalation path.** The claimant can request a human at any point.
-- **Photo evidence is corroborative, not determinative.** A cross-modal mismatch prompts human review; it never independently affects claim outcome.
-- **Coverage and cost indicators, if built, are recommendations only.** Rules-based, clearly labelled, with no downstream automated effect — the same discipline applied consistently, not a carve-out.
-- **Synthetic data only.** No real policyholder data at any stage of the build.
+## 1. Executive Summary
+
+Insurance claims begin with a conversation, but much of the operational work happens after that conversation: capturing structured details, validating policy information, collecting evidence, identifying missing information, assessing the incident, routing the case, and preparing a claims professional to make a decision. This creates delay for customers and repetitive work for staff.
+
+The proposed product is a voice-first AI claims agent. A policyholder can describe an accident naturally rather than navigating a long form or waiting for a call-centre employee. The agent asks adaptive questions, retrieves policy information, requests evidence, analyses uploaded images or documents, creates a structured claim record, performs configurable business checks, and decides whether the case can proceed automatically or requires human review.
+
+The key product insight is the handoff. When human judgment is required, the claims officer receives a decision-ready case rather than a transcript or a half-completed form. The system shows what happened, what evidence was collected, what policy information was checked, what the AI inferred, what remains uncertain, and why the case was routed for review.
+
+Recommended judging narrative: Track 2 + ElevenLabs. The new capability is not merely automated call intake; it is an agent that can coordinate the work between first contact and human decision.
+
+## 2. Why This Problem
+
+### 2.1 Customer pain
+
+A stressful event often starts with a customer who does not know what information the insurer needs.
+
+Customers can be asked to repeat the same incident details across forms, calls, uploads, and follow-ups.
+
+The claim may not progress until missing information is found and manually reconciled.
+
+### 2.2 Insurer pain
+
+Claims teams receive unstructured narratives that must be converted into structured records.
+
+Employees spend time on repetitive intake and administration instead of higher-value judgment and exception handling.
+
+Evidence can arrive in different forms: voice, text, photos, receipts, policy documents, and repair information.
+
+The complexity of a claim is not known at the start, so routing and escalation matter.
+
+### 2.3 Why AI is appropriate
+
+This workflow combines exactly the capabilities that modern AI is becoming useful at: natural language interaction, multimodal understanding, retrieval over business data, structured extraction, tool calling, reasoning over rules, and workflow orchestration. Voice is especially valuable because the customer can explain the event in their own words while the system handles the structure.
+
+## 3. Market Context and Strategic Implication
+
+The idea is commercially relevant, but the team should not claim that conversational claims intake is unprecedented. The market has already moved toward voice FNOL and agentic claims automation. The competitive research therefore changes our differentiation strategy: we should demonstrate a broader workflow and a stronger human-agent operating model rather than present “voice claims intake” as the invention.
+
+| Evidence | What it tells us | Implication for the hackathon |
+|---|---|---|
+| ElevenLabs insurance offering | ElevenLabs currently markets insurance agents for claims intake/FNOL, policy servicing, and structured handoffs. | Voice must be a core interface, but we need to go beyond “AI answers the phone.” |
+| Guidewire Qusar (Aug 2026) | Guidewire describes voice-driven FNOL, direct claim capture, adjuster summaries, and an agentic framework connected to core insurance systems. | A simple FNOL demo is too close to an established category. |
+| Allianz Australia (2026) | Allianz reports an agentic AI solution for food-spoilage claims with the potential to reduce processing and settlement time by around 80%. | Agentic automation in claims is a credible business direction, including in Australia. |
+| Hackathon constraint | Judges will care about problem clarity, usefulness, technical execution, and demo quality more than production readiness. | Use a simulated insurer backend but make the agent actually execute tools and update state. |
+
+Sources used for this assessment: ElevenLabs insurance AI and conversational insurance materials [1][2]; Guidewire Qusar release materials [3]; Allianz Australia innovation announcement [4]. Full links are listed in Section 17.
+
+## 4. Product Definition
+
+Product statement: A voice-first AI claims employee that takes an insurance claim from first conversation to a decision-ready case, while keeping humans in control of high-risk or ambiguous decisions.
+
+### 4.1 What the product is
+
+A conversational interface for the policyholder.
+
+An agent capable of reading policy and claim data and writing to a claims workflow.
+
+A multimodal evidence collector and analyst.
+
+A triage and escalation layer that determines when human judgment is needed.
+
+A claims officer workspace that exposes the AI’s work and uncertainty.
+
+### 4.2 What it is not
+
+Not a generic customer-service chatbot.
+
+Not a replacement for licensed claims professionals.
+
+Not an insurance pricing engine certified for production use.
+
+Not a claim-denial engine.
+
+Not a production integration with a real insurer during the hackathon.
+
+## 5. Primary User Journeys
+
+### 5.1 Journey A — Straightforward motor claim
+
+Customer calls and says they were involved in a rear-end collision.
+
+Agent checks safety: injuries, emergency services, immediate danger.
+
+Agent authenticates or identifies the customer using mock policy data.
+
+Agent gathers the minimum necessary incident details through adaptive conversation.
+
+Agent retrieves the policy and explains relevant coverage and excess from the source record.
+
+Agent asks the customer to upload damage photos and any available documents.
+
+Vision/document analysis converts evidence into structured findings.
+
+Agent runs configured business checks: coverage, completeness, risk flags, and routing.
+
+Agent creates or updates the claim record and produces a structured case summary.
+
+If the claim is within the prototype’s auto pathway, the system advances it; otherwise it routes to a claims officer with full context.
+
+### 5.2 Journey B — Ambiguous claim
+
+The customer gives conflicting or incomplete information. The agent explicitly marks uncertainty, asks targeted follow-ups, and routes the case for human review. The human sees the conflict rather than receiving a false confident answer.
+
+### 5.3 Journey C — Safety or vulnerability escalation
+
+The customer indicates serious injury, immediate danger, or another high-risk condition. The voice agent stops ordinary claim processing, provides an appropriate safety-oriented response, and escalates immediately. This is important for demonstrating that autonomy is bounded by policy.
+
+## 6. Functional Requirements
+
+| ID | Requirement | Priority | Acceptance test |
+|---|---|---|---|
+| FR-01 | Natural voice intake using ElevenLabs. | Must | A tester can complete a realistic accident conversation without manually filling a long form. |
+| FR-02 | Dynamic questioning based on missing information. | Must | Agent asks follow-ups only where needed and updates structured state. |
+| FR-03 | Policy retrieval. | Must | Agent retrieves a mock policy and cites relevant fields in the claim view. |
+| FR-04 | Claim creation/update via tools. | Must | Conversation results in an actual persisted claim record. |
+| FR-05 | Evidence upload and storage. | Must | Customer can upload at least one image/document and it is attached to the claim. |
+| FR-06 | Multimodal evidence analysis. | Must | System extracts visible damage or key document facts with confidence/limitations. |
+| FR-07 | Triage. | Must | Claim is routed to auto-path, human review, or urgent escalation based on explicit rules. |
+| FR-08 | Human handoff summary. | Must | Claims officer sees a structured case summary with evidence and uncertainties. |
+| FR-09 | Audit trail. | Should | System shows key actions/tools used and important state changes. |
+| FR-10 | Claim status follow-up. | Should | Customer can ask what is happening with an existing claim. |
+| FR-11 | Multilingual voice. | Stretch | Demonstrate one additional language where quality is strong enough for a clean demo. |
+| FR-12 | Repair workflow integration. | Stretch | Prototype repair booking/estimate handoff as a downstream tool. |
+
+## 7. Non-Functional Requirements and Guardrails
+
+| Area | Requirement |
+|---|---|
+| Safety | Emergency/injury scenarios override normal workflow. |
+| Accuracy | Do not invent policy coverage, claim facts, or damage findings. Unknown values remain unknown. |
+| Human control | Final adverse or high-impact decisions remain with a human for the prototype. |
+| Traceability | Important recommendations should be attributable to source data, rules, or observed evidence. |
+| Privacy | Use synthetic customers, policies, and evidence only. Do not use real personal data. |
+| Latency | Voice responses should feel conversational; long-running analysis can show a visible progress state. |
+| Robustness | Agent should handle interruption, correction, or missing evidence without losing the claim state. |
+| Scope control | Prototype should explicitly label estimates and model judgments as preliminary, not binding insurance decisions. |
+
+## 8. System Architecture
+
+The prototype should use a small number of reliable components rather than a complicated multi-agent framework. “Agentic” should describe the system’s ability to choose actions and execute tools, not the number of LLMs in the diagram.
+
+```
+CUSTOMER
+   ↓
+ELEVENLABS VOICE AGENT
+   ↓
+ORCHESTRATOR / LLM
+   ├── Policy tools
+   ├── Claims tools
+   ├── Evidence tools
+   ├── Vision/document analysis
+   ├── Business-rule checks
+   └── Escalation tools
+   ↓
+CLAIM STATE / DATABASE
+   ↓
+CLAIMS OFFICER DASHBOARD
+```
+
+### 8.1 Core components
+
+| Component | Responsibility | Hackathon implementation |
+|---|---|---|
+| Voice layer | Real-time conversation and speech interaction. | ElevenLabs agent/voice stack. |
+| Orchestrator | Maintains task state, chooses tools, asks next questions. | One strong LLM with tool calling. |
+| Policy service | Returns policy details and coverage fields. | FastAPI/Node mock service backed by Postgres/Supabase. |
+| Claims service | Creates and updates claim records. | Simple REST API. |
+| Evidence service | Stores uploads and returns analysis. | Object storage + multimodal model. |
+| Triage engine | Applies deterministic safety and routing rules around model outputs. | Explicit rule layer, not only prompt instructions. |
+| Claims dashboard | Lets human review the prepared case and approve/escalate. | Next.js/React UI. |
+
+## 9. Agent Tools and Contracts
+
+The agent should have explicit tools so that the demo proves the AI can act on a business system rather than merely generate text.
+
+| Tool | Inputs | Output |
+|---|---|---|
+| get_customer | customer identifier | customer profile |
+| get_policy | policy identifier | coverage, excess, vehicle, status |
+| create_claim | customer, incident data | claim ID |
+| update_claim | claim ID, structured fields | updated claim |
+| attach_evidence | claim ID, file reference | evidence ID |
+| analyse_damage | evidence IDs | observations, confidence, limitations |
+| run_coverage_check | policy + incident fields | coverage status + rule references |
+| run_triage | claim state + evidence | route + reason + flags |
+| estimate_repair | damage observations | preliminary range + assumptions |
+| escalate_claim | claim ID, reason | human queue record |
+| generate_summary | claim ID | decision-ready summary |
+
+## 10. Prototype Data Model
+
+| Entity | Key fields |
+|---|---|
+| Customer | id, name, contact, policy_ids |
+| Policy | id, customer_id, vehicle, coverage_type, excess, start/end dates, relevant rules |
+| Claim | id, customer_id, policy_id, status, incident_time, location, narrative, structured facts, route, confidence |
+| Evidence | id, claim_id, type, file_url, extracted_facts, analysis_confidence |
+| Assessment | claim_id, damage_findings, estimate_low, estimate_high, assumptions |
+| AuditEvent | timestamp, actor, action, tool, inputs_summary, result_summary |
+
+All data should be synthetic. Create 10–20 mock policyholders and 3–5 claims, with at least three deliberately distinct demo scenarios.
+
+## 11. Demo Scenarios
+
+| Scenario | What happens | Why it matters |
+|---|---|---|
+| A. Straightforward collision | Clear rear-end collision, valid comprehensive cover, complete photos. Claim becomes decision-ready. | Shows the happy path and end-to-end automation. |
+| B. Ambiguous liability | Customer account conflicts with incident narrative or evidence. Agent flags uncertainty and routes to human. | Shows honesty, uncertainty handling, and meaningful human oversight. |
+| C. Injury / urgent escalation | Customer mentions injury or immediate safety risk. Agent stops normal flow and escalates. | Shows guardrails and prevents “AI does everything” criticism. |
+
+## 12. Claims Officer Experience
+
+The human experience should be designed around decision quality, not around displaying every token the AI generated. The claims officer needs a concise operational picture with the ability to inspect supporting evidence.
+
+| Panel | Content |
+|---|---|
+| Claim header | Claim ID, customer, policy, status, route. |
+| Incident | Structured timeline and customer-stated facts. |
+| Coverage | Relevant policy fields, checks passed/failed, source reference. |
+| Evidence | Photos/documents with AI observations and confidence. |
+| Assessment | Preliminary damage range, assumptions, missing information. |
+| Risk & uncertainty | Flags, conflicts, and reasons for escalation. |
+| Recommended action | Suggested next step, explicitly non-binding. |
+| Actions | Approve next stage, request information, escalate, edit/override. |
+| Audit | Tool actions and key state changes. |
+
+## 13. UX and Conversation Design
+
+Natural, calm, empathetic voice. The customer has just experienced an accident.
+
+Minimum necessary questions. Avoid making the conversation feel like a form read aloud.
+
+Progressive disclosure. Ask for more detail only when the claim state requires it.
+
+Transparent transitions. Tell the customer when the system is checking a policy or analysing an upload.
+
+Never overclaim. Use phrases such as “Based on your policy record...” and “preliminary estimate.”
+
+Fast escalation. When a claim needs human judgment, the agent should make the handoff feel intentional rather than like a failure.
+
+## 14. 48-Hour Build Strategy
+
+| Time | Goal | Deliverables |
+|---|---|---|
+| 0–4h | Lock scope | Final user flow, architecture, demo scenarios, synthetic data schema. |
+| 4–10h | Voice loop | ElevenLabs agent handles initial conversation and gathers structured state. |
+| 10–18h | Business tools | Policy lookup, claim creation/update, triage and persistence. |
+| 18–26h | Evidence | Upload flow, multimodal analysis, preliminary assessment. |
+| 26–34h | Human experience | Claims officer dashboard and readable case summary. |
+| 34–40h | Integration | Connect the full workflow and add audit/uncertainty states. |
+| 40–44h | Polish | Conversation tuning, loading states, seeded demo data, error handling. |
+| 44–48h | Presentation | Demo rehearsal, judge Q&A, screenshots/video fallback, final deployment. |
+
+### 14.1 Build priority
+
+Priority order: voice → tool execution → persisted claim state → evidence → dashboard → polish. Do not spend the first day building a beautiful dashboard before the agent can complete the core workflow.
+
+## 15. Team Structure
+
+| Role | Primary ownership | Secondary ownership |
+|---|---|---|
+| Agent / AI engineer | ElevenLabs, prompts, tool calling, orchestration, conversation state. | Guardrails and evaluation. |
+| Backend engineer | APIs, database, synthetic data, claim state, audit events. | Deployment/integration. |
+| Frontend/product engineer | Claims officer dashboard, evidence UX, visual state. | Demo polish. |
+| Product/UX/pitch lead | Workflow design, conversation scripts, judging narrative, demo. | User testing and documentation. |
+| Full-stack / floater | Integration gaps, testing, edge cases. | Pitch backup. |
+
+For a 2–3 person team, combine roles aggressively and keep the UI minimal. The agent + backend loop is the critical path.
+
+## 16. Success Metrics
+
+| Metric | Prototype target | What it demonstrates |
+|---|---|---|
+| First-contact completion | Most demo claims reach a structured claim record in one interaction. | End-to-end capability. |
+| Information completeness | Required fields are populated or explicitly marked missing. | Less back-and-forth. |
+| Evidence processing | Uploaded evidence appears in the claim with structured findings. | Multimodal capability. |
+| Human handoff quality | Claims officer can understand the case without replaying the entire conversation. | Operational usefulness. |
+| Guardrail accuracy | High-risk scenario is escalated reliably in test scenarios. | Safe autonomy. |
+| Demo reliability | Core flow succeeds repeatedly on seeded data. | Hackathon execution quality. |
+
+## 17. Competitive Positioning
+
+The proposal should acknowledge the category rather than pretending it does not exist. The differentiation is the end-to-end operating model: voice intake is the entry point, but the product value is the conversion of conversation and evidence into an actionable claims workflow with bounded autonomy and a high-quality human handoff.
+
+| Common alternative | Weakness relative to proposal | Our positioning |
+|---|---|---|
+| Traditional call centre | High labour cost and repetitive intake. | Move routine intake and preparation to an agent. |
+| Web forms | Rigid, slow, poor fit for stressful incidents. | Natural voice + adaptive questioning. |
+| Generic voice bot | Can answer or collect fields but may stop short of real work. | Tool execution changes claim state. |
+| AI FNOL-only product | Focuses primarily on first notice capture. | Continue into evidence, assessment, triage, and decision-ready handoff. |
+| Human-only workflow | Strong judgment but costly and variable for repetitive tasks. | Reserve human time for exceptions and decisions. |
+
+## 18. Risks and Mitigations
+
+| Risk | Impact | Mitigation |
+|---|---|---|
+| Hallucinated policy coverage | High | Ground coverage answers in retrieved mock policy fields and deterministic checks. |
+| Over-trusting damage estimate | High | Label estimates as preliminary; surface assumptions; require human approval. |
+| Voice latency | Medium | Keep prompts concise; precompute demo data; allow async evidence analysis with progress UI. |
+| Scope creep | High | Freeze MVP after voice → claim creation → evidence → handoff works. |
+| Demo internet/API failure | Medium | Prepare seeded fallback recordings and deterministic demo path. |
+| Looks like a thin chatbot | High | Make tool calls, database state changes, evidence processing, and officer dashboard visible. |
+| Too close to existing products | Medium | Position around claim orchestration and decision-ready handoff, not novelty of FNOL. |
+
+## 19. Anticipated Judge Questions
+
+| Question | Answer |
+|---|---|
+| “Isn’t this already being done?” | Voice FNOL is already a real category. Our prototype goes beyond intake by orchestrating evidence, policy checks, triage, and the human decision workflow. |
+| “Why voice?” | After an accident, speaking naturally is often easier than completing a rigid form. Voice lets the customer describe the event while the agent creates structured data and takes actions. |
+| “Why does this need an LLM?” | The customer narrative is unstructured and the next best question depends on what is missing. The model handles language and flexible interaction; deterministic rules constrain high-impact decisions. |
+| “Will it replace adjusters?” | The design is intentionally human-in-the-loop. The goal is to remove repetitive intake and preparation so humans spend time on ambiguous, high-value decisions. |
+| “How do you prevent hallucinations?” | Retrieved source data, explicit tools, deterministic coverage checks, uncertainty states, audit events, and human approval for consequential actions. |
+| “What happens in production?” | Production would require insurer integrations, identity controls, security, regulatory review, model evaluation, monitoring, and governed automation thresholds. The hackathon prototype deliberately uses synthetic systems. |
+
+## 20. The 3-Minute Demo Story
+
+| Time | Screen / action | Narrative |
+|---|---|---|
+| 0:00–0:20 | Customer calls. | “I’ve just crashed my car. I don’t know what I need to do.” |
+| 0:20–0:55 | ElevenLabs conversation. | Agent checks safety, captures incident, retrieves policy context, asks adaptive questions. |
+| 0:55–1:20 | Evidence upload. | Customer uploads damage photos; system analyses them and updates the claim. |
+| 1:20–1:45 | Live claim state. | Policy, coverage, evidence, estimate, and triage status appear as completed work. |
+| 1:45–2:20 | Claims officer view. | Human sees a decision-ready case with supporting evidence and uncertainty. |
+| 2:20–2:40 | Escalation demonstration. | Show a second scenario with injury or conflicting evidence routing to human review. |
+| 2:40–3:00 | Closing slide. | “The voice is the interface. The real product is the agent that does the work.” |
+
+Do not open the demo with a slide deck. Open with the accident. Make the judges experience the workflow before explaining the architecture.
+
+## 21. Track Strategy
+
+Primary: Track 2 — Create a New Business Capability
+
+Track 2 is the strongest positioning because the prototype demonstrates an AI-native business capability: a system that can interact with a customer, inspect evidence, retrieve business context, execute actions across a claims workflow, and decide when a human should take over. The “new capability” is the agentic operating layer, not voice alone.
+
+Secondary: Built With ElevenLabs
+
+ElevenLabs is core to the product because voice is the primary customer interface. The customer does not need to translate their experience into insurance form fields; they speak naturally, and the agent performs the translation into business actions. This makes the voice technology integral to the workflow rather than a decorative feature.
+
+Fallback: Track 1 or Track 3
+
+The same prototype can be described under Track 1 as a significant improvement to claims intake/processing, or under Track 3 as a response to the business problem of claims delays and administrative burden. However, Track 2 gives the clearest strategic story if the prototype demonstrates genuine agentic execution.
+
+## 22. Post-Hackathon Roadmap
+
+| Phase | Capability |
+|---|---|
+| 0–3 months | More claim types, stronger policy retrieval, better auditability, configurable business rules, real insurer-style integrations. |
+| 3–6 months | Repairer networks, document automation, richer triage, claim status across channels, multilingual support. |
+| 6–12 months | Controlled autonomous pathways for eligible claims, production monitoring, model evaluation, security/compliance, carrier-specific workflows. |
+
+The prototype should not claim production readiness. Its purpose is to demonstrate a credible direction and a technically coherent architecture.
+
+## 23. Implementation Checklist
+
+Freeze one motor-claim scenario as the golden path.
+
+Create synthetic customer, policy, claim, and evidence data.
+
+Build the ElevenLabs voice agent and confirm tool calling.
+
+Implement policy lookup and claim creation before any UI polish.
+
+Persist conversation-derived structured state.
+
+Implement evidence upload and multimodal analysis.
+
+Implement explicit triage and escalation rules.
+
+Build a single-screen claims officer dashboard.
+
+Add visible audit trail / action history.
+
+Test ambiguous and injury scenarios.
+
+Rehearse the three-minute demo repeatedly.
+
+Prepare a fallback recorded voice demo in case network/API reliability fails.
+
+Sanitize all demo data and remove real personal information.
+
+## 24. Sources
+
+[1] ElevenLabs — Insurance AI answering service and virtual receptionist. https://elevenlabs.io/ai-answering-service/insurance
+
+[2] ElevenLabs — Conversational AI in insurance: claims intake and workflow automation. https://elevenlabs.io/blog/conversational-ai-in-insurance
+
+[3] Guidewire — Qusar cloud release, including Agentic FNOL and claims capabilities (Aug 2026). https://www.guidewire.com/products/technology/guidewire-cloud-platform-releases
+
+[4] Allianz Australia — 2026 Canstar Innovation Excellence Award for automation of food spoilage claims. https://www.allianz.com.au/about-us/work-with-us/partners/news/allianz-wins-2026-canstar-innovation-excellence-award.html
+
+## Final recommendation
+
+Build the insurance claims agent. Do not sell it as “an AI chatbot that files a claim.” Sell it as a new operating capability: a voice-first agent that moves a claim from messy human conversation to a structured, evidence-backed, human-ready decision package. That is the most defensible version of the idea within 48 hours.
