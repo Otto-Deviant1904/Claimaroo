@@ -10,14 +10,14 @@ test("landing links to intake and the officer workspace", async ({ page }) => {
   await expect(page).toHaveTitle(/Claimaroo/);
   await expect(page.getByRole("link", { name: "Skip to content" })).toHaveAttribute(
     "href",
-    "#cl-main",
+    "#main",
   );
 
-  await page.getByRole("link", { name: "File a Insurance Claim" }).first().click();
+  await page.getByRole("link", { name: "Start a claim" }).first().click();
   await expect(page).toHaveURL(/\/claim$/);
 
   await page.goto("/");
-  await page.getByRole("link", { name: "Open the officer workspace" }).first().click();
+  await page.getByRole("link", { name: "Officer workspace" }).first().click();
   await expect(page).toHaveURL(/\/claims$/);
 });
 
@@ -30,9 +30,8 @@ test("intake blocks Start until a photo is added", async ({ page }) => {
   ).toBeVisible();
   const start = page.getByRole("button", { name: "Start the call" });
   await expect(start).toHaveAttribute("aria-disabled", "true");
-  await expect(page.getByLabel("Mobile on your policy")).toHaveValue(
-    "0412 000 001",
-  );
+  const phone = page.getByLabel("Mobile on your policy");
+  await expect(phone).toHaveValue("");
 
   const library = page.locator("#cl-photo-library");
   await expect(library).toBeAttached();
@@ -43,6 +42,9 @@ test("intake blocks Start until a photo is added", async ({ page }) => {
   });
 
   await expect(page.getByText("1 photo added", { exact: false })).toBeVisible();
+  await expect(start).toHaveAttribute("aria-disabled", "true");
+
+  await phone.fill("0412 000 001");
   await expect(start).not.toHaveAttribute("aria-disabled", "true");
 });
 
