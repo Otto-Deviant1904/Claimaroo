@@ -24,10 +24,15 @@ test("landing links to intake and the officer workspace", async ({ page }) => {
 test("intake blocks Start until a photo is added", async ({ page }) => {
   await page.goto("/claim");
   await expect(
-    page.getByText("Add at least one photo of the damage."),
+    page.getByText(
+      "Add at least one photo and keep the policy mobile filled in.",
+    ),
   ).toBeVisible();
   const start = page.getByRole("button", { name: "Start the call" });
   await expect(start).toHaveAttribute("aria-disabled", "true");
+  await expect(page.getByLabel("Mobile on your policy")).toHaveValue(
+    "0412 000 001",
+  );
 
   const library = page.locator("#cl-photo-library");
   await expect(library).toBeAttached();
