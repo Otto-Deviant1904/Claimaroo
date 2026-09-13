@@ -104,6 +104,7 @@ export function toClaimView(pack: CasePack): ClaimView {
     conflictingAccounts: facts.conflictingAccounts ?? null,
     routeReason: claim.routeReason || "Not triaged yet.",
     recommendation: claim.recommendedAction || "Review the case.",
+    transcript: claim.transcript ?? [],
     audit: audit.map((event) => ({
       timestamp: iso(event.timestamp),
       actor: event.actor,

@@ -396,6 +396,34 @@ export function CaseView({ claim }: { claim: ClaimView }) {
               <p className="panel-empty">No evidence uploaded yet.</p>
             ),
           )}
+          {panel(
+            "Call transcript",
+            claim.transcript.length ? (
+              <ol className="transcript">
+                {claim.transcript.map((entry, index) => (
+                  <li
+                    className={`transcript-line ${entry.role}`}
+                    key={`${entry.at}-${index}`}
+                  >
+                    <span className="transcript-role">
+                      {entry.role === "tool"
+                        ? `Tool · ${entry.name ?? "unknown"}`
+                        : entry.role === "agent"
+                          ? "Claims assistant"
+                          : entry.role === "user"
+                            ? "Customer"
+                            : "System"}
+                    </span>
+                    <p>{entry.text}</p>
+                  </li>
+                ))}
+              </ol>
+            ) : (
+              <p className="panel-empty">
+                No transcript was captured for this claim.
+              </p>
+            ),
+          )}
         </div>
         <div className="case-column">
           {panel(

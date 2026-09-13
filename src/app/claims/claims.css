@@ -11,3 +11,47 @@
 .site-header-end>span{font-size:12px;color:#71717a}
 .site-header .secondary{min-height:44px;font-size:14px}
 @media(max-width:520px){.site-header-end>span{font-size:11px}}
+
+.transcript {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 12px;
+}
+
+.transcript-line {
+  border-left: 3px solid var(--line, #d8d5cf);
+  padding: 4px 0 4px 14px;
+}
+
+.transcript-line.agent {
+  border-left-color: #2563eb;
+}
+
+.transcript-line.user {
+  border-left-color: #16a34a;
+}
+
+.transcript-line.tool {
+  border-left-color: #a16207;
+}
+
+.transcript-line.system {
+  border-left-color: #9ca3af;
+}
+
+.transcript-role {
+  display: block;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #6b7280;
+  margin-bottom: 2px;
+}
+
+.transcript-line p {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

@@ -11,7 +11,7 @@ import {
   type RefObject,
 } from "react";
 import { OrbBreathe } from "@/components/claim/orb-breathe";
-import { TOOL_NAMES } from "@/lib/types";
+import { TOOL_NAMES, type TranscriptEntry, type TranscriptRole } from "@/lib/types";
 import "../claimaroo.css";
 
 const WORKSPACE = "/claims";
@@ -96,9 +96,47 @@ function ClaimIntake() {
   const phoneRef = useRef(phone);
   const hasConnectedRef = useRef(false);
   const lodgingFallbackRef = useRef(false);
+  const transcriptRef = useRef<TranscriptEntry[]>([]);
+  const transcriptSavedRef = useRef(0);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const libraryInputRef = useRef<HTMLInputElement>(null);
   const lodgedHeadingRef = useRef<HTMLHeadingElement>(null);
+
+  const logTurn = useCallback(
+    (role: TranscriptRole, text: string, name?: string) => {
+      const trimmed = text?.trim();
+      if (!trimmed) return;
+      transcriptRef.current = [
+        ...transcriptRef.current,
+        {
+          at: new Date().toISOString(),
+          role,
+          text: trimmed,
+          ...(name ? { name } : {}),
+        },
+      ];
+    },
+    [],
+  );
+
+  const persistTranscript = useCallback(async (id: string, final = false) => {
+    const last = transcriptRef.current[transcriptRef.current.length - 1];
+    if (final && last?.role !== "system") {
+      logTurn("system", "Call ended.");
+    }
+    if (transcriptRef.current.length === transcriptSavedRef.current) return;
+    transcriptSavedRef.current = transcriptRef.current.length;
+    try {
+      await fetch(`/api/claims/${encodeURIComponent(id)}/transcript`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ transcript: transcriptRef.current }),
+      });
+    } catch {
+      // Transcript is best-effort; claim persistence does not depend on it.
+      transcriptSavedRef.current = 0;
+    }
+  }, [logTurn]);
 
   const setPhotos = useCallback((updater: (prev: Photo[]) => Photo[]) => {
     setPhotosState((prev) => {
@@ -196,7 +234,13 @@ function ClaimIntake() {
       }
 
       setClaimId(createdId);
+      logTurn(
+        "tool",
+        "Voice session ended before the agent could file the claim. The intake page filed it using the policy mobile on record.",
+        "create_claim",
+      );
       await uploadPendingRef.current(createdId);
+      void persistTranscript(createdId, true);
       try {
         await fetch("/api/tools/analyse_damage", {
           method: "POST",
@@ -211,7 +255,7 @@ function ClaimIntake() {
       lodgingFallbackRef.current = false;
       setFilingFallback(false);
     }
-  }, [setClaimId]);
+  }, [logTurn, persistTranscript, setClaimId]);
 
   const lodgeFallbackRef = useRef(lodgeFallbackIfNeeded);
   useEffect(() => {
@@ -224,10 +268,13 @@ function ClaimIntake() {
         if (!claimIdRef.current) {
           await lodgeFallbackRef.current();
         }
+        if (claimIdRef.current) {
+          await persistTranscript(claimIdRef.current, true);
+        }
         setLodged(true);
       })();
     }
-  }, [status]);
+  }, [status, persistTranscript]);
 
   useEffect(() => {
     if (lodged) lodgedHeadingRef.current?.focus();
@@ -321,6 +368,7 @@ function ClaimIntake() {
     > = {};
     for (const name of TOOL_NAMES) {
       tools[name] = async (parameters) => {
+        logTurn("tool", `called with ${JSON.stringify(parameters).slice(0, 300)}`, name);
         const response = await fetch(`/api/tools/${name}`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -332,16 +380,19 @@ function ClaimIntake() {
           if (createdId) {
             setClaimId(createdId);
             await uploadPendingRef.current(createdId);
+            void persistTranscript(createdId);
           }
         }
         if (!response.ok || body.ok === false) {
+          logTurn("tool", `failed: ${body.error ?? "unknown error"}`, name);
           return body.error ?? body.resultText ?? `${name} failed`;
         }
+        logTurn("tool", "succeeded", name);
         return body.resultText ?? JSON.stringify(body.result ?? {});
       };
     }
     return tools;
-  }, [setClaimId]);
+  }, [logTurn, persistTranscript, setClaimId]);
 
   const addFiles = useCallback(
     (list: FileList | File[]) => {
@@ -450,6 +501,12 @@ function ClaimIntake() {
           // Contextual updates are best-effort.
         }
       },
+      onMessage: (message) => {
+        logTurn(
+          message.source === "user" ? "user" : "agent",
+          message.message,
+        );
+      },
       onError: (message) => {
         setError(typeof message === "string" ? message : String(message));
       },
@@ -457,7 +514,7 @@ function ClaimIntake() {
         setError(`The agent called an unknown tool: ${tool.tool_name}`);
       },
     });
-  }, [clientTools, sessionUserId, startSession, sendContextualUpdate]);
+  }, [clientTools, logTurn, sessionUserId, startSession, sendContextualUpdate]);
 
   const reset = useCallback(() => {
     for (const photo of photosRef.current) {
@@ -467,6 +524,8 @@ function ClaimIntake() {
     claimIdRef.current = null;
     hasConnectedRef.current = false;
     lodgingFallbackRef.current = false;
+    transcriptRef.current = [];
+    transcriptSavedRef.current = 0;
     setPhotosState([]);
     setClaimIdState(null);
     setSessionUserId(null);

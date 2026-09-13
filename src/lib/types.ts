@@ -31,6 +31,14 @@ export const COVERAGE_TYPES = [
 ] as const;
 export type CoverageType = (typeof COVERAGE_TYPES)[number];
 
+export type TranscriptRole = "agent" | "user" | "tool" | "system";
+export type TranscriptEntry = {
+  at: string;
+  role: TranscriptRole;
+  text: string;
+  name?: string;
+};
+
 export type StructuredFacts = {
   injuries?: boolean | null;
   injuryDescription?: string | null;

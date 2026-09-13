@@ -14,6 +14,7 @@ import type {
   DamageFinding,
   PolicyRule,
   StructuredFacts,
+  TranscriptEntry,
   TriageRoute,
 } from "../lib/types";
 
@@ -76,6 +77,10 @@ export const claims = pgTable("claims", {
   summary: text("summary"),
   officerNotes: text("officer_notes"),
   conversationId: text("conversation_id"),
+  transcript: jsonb("transcript")
+    .$type<TranscriptEntry[]>()
+    .notNull()
+    .default([]),
   createdAt: timestamp("created_at", { withTimezone: true })
     .defaultNow()
     .notNull(),

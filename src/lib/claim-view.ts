@@ -1,4 +1,4 @@
-import type { ClaimStatus, TriageRoute } from "@/lib/types";
+import type { ClaimStatus, TriageRoute, TranscriptEntry } from "@/lib/types";
 
 export const STATUS_LABELS: Record<ClaimStatus, string> = {
   intake: "Intake",
@@ -83,6 +83,7 @@ export type ClaimView = {
   conflictingAccounts: boolean | null;
   routeReason: string;
   recommendation: string;
+  transcript: TranscriptEntry[];
   audit: {
     timestamp: string;
     actor: string;
