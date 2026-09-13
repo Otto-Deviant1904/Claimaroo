@@ -17,6 +17,22 @@ describe("runTriage", () => {
     expect(result.flags).toContain("injury_reported");
   });
 
+  it("routes ambulance without an injury flag to urgent over a coverage gap", () => {
+    const result = runTriage({
+      injuries: false,
+      emergencyServices: true,
+      immediateDanger: false,
+      conflictingAccounts: false,
+      missingRequiredFields: [],
+      coverageStatus: "not_covered",
+      evidenceCount: 2,
+      analysisConfidence: "high",
+    });
+    expect(result.route).toBe("urgent");
+    expect(result.flags).toContain("emergency_services");
+    expect(result.flags).toContain("coverage_gap");
+  });
+
   it("routes immediate danger to urgent even without injury flag", () => {
     const result = runTriage({
       injuries: false,

@@ -1,3 +1,15 @@
+/** Australian financial year containing `now`, as YYYY-MM-DD (UTC). */
+export function demoPolicyTerm(now = new Date()) {
+  const isoDate = now.toISOString().slice(0, 10);
+  const year = Number(isoDate.slice(0, 4));
+  const month = Number(isoDate.slice(5, 7));
+  const startYear = month >= 7 ? year : year - 1;
+  return {
+    startDate: `${startYear}-07-01`,
+    endDate: `${startYear + 1}-06-30`,
+  };
+}
+
 export const DEMO_SCENARIOS = [
   {
     id: "A",

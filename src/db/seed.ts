@@ -1,4 +1,5 @@
 import { config } from "dotenv";
+import { eq } from "drizzle-orm";
 import { getDb, getSql } from "./index";
 import {
   assessments,
@@ -8,6 +9,7 @@ import {
   evidence,
   policies,
 } from "./schema";
+import { demoPolicyTerm } from "../lib/demo";
 import type { PolicyRule } from "../lib/types";
 
 config({ path: ".env.local" });
@@ -52,8 +54,7 @@ const PEOPLE = [
       vehicleColour: "silver",
       coverageType: "comprehensive" as const,
       excessCents: 80000,
-      startDate: "2025-07-01",
-      endDate: "2026-06-30",
+      ...demoPolicyTerm(),
       status: "active",
       relevantRules: rules(
         "Comprehensive cover includes accidental collision damage to the insured vehicle, subject to excess.",
@@ -122,8 +123,7 @@ const PEOPLE = [
       vehicleColour: "grey",
       coverageType: "comprehensive" as const,
       excessCents: 120000,
-      startDate: "2025-09-01",
-      endDate: "2026-08-31",
+      ...demoPolicyTerm(),
       status: "active",
       relevantRules: rules("Commercial accessories may be excluded unless listed."),
     },
@@ -373,6 +373,24 @@ export async function seed() {
       .from(customers)
       .limit(1);
     if (already.length > 0) {
+      const term = demoPolicyTerm();
+      const today = new Date().toISOString().slice(0, 10);
+      const [maya] = await db
+        .select({
+          startDate: policies.startDate,
+          endDate: policies.endDate,
+        })
+        .from(policies)
+        .where(eq(policies.id, "POL-1001"));
+      if (maya && (today < maya.startDate || today > maya.endDate)) {
+        await db
+          .update(policies)
+          .set({ startDate: term.startDate, endDate: term.endDate })
+          .where(eq(policies.id, "POL-1001"));
+        console.log(
+          `Refreshed POL-1001 term to ${term.startDate} – ${term.endDate}.`,
+        );
+      }
       console.log(
         "Seed skipped: customers already present. Set SEED_RESET=1 to replace.",
       );

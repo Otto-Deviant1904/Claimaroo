@@ -4,6 +4,8 @@ import { getDb } from "@/db";
 import { claims } from "@/db/schema";
 import { recordAudit } from "@/lib/audit";
 import { corsPreflight, withCors } from "@/lib/cors";
+import { applyInferredIntake } from "@/lib/transcript-facts";
+import { executeTool } from "@/lib/tools";
 import type { TranscriptEntry, TranscriptRole } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -57,14 +59,27 @@ export async function POST(
   }
 
   const db = getDb();
-  const [claim] = await db.select({ id: claims.id }).from(claims).where(eq(claims.id, id));
+  const [claim] = await db.select().from(claims).where(eq(claims.id, id));
   if (!claim) {
     return withCors(NextResponse.json({ error: "Claim not found" }, { status: 404 }));
   }
 
+  const applied = applyInferredIntake(claim, transcript);
+  const safetyChanged =
+    applied.structuredFacts.injuries === true ||
+    applied.structuredFacts.emergencyServices === true ||
+    applied.structuredFacts.immediateDanger === true;
+
   await db
     .update(claims)
-    .set({ transcript, updatedAt: new Date() })
+    .set({
+      transcript,
+      structuredFacts: applied.structuredFacts,
+      location: applied.location,
+      narrative: applied.narrative,
+      incidentTime: applied.incidentTime,
+      updatedAt: new Date(),
+    })
     .where(eq(claims.id, id));
 
   await recordAudit({
@@ -73,6 +88,14 @@ export async function POST(
     action: "transcript_saved",
     result: `${transcript.length} entries`,
   });
+
+  if (safetyChanged) {
+    try {
+      await executeTool("run_triage", { claim_id: id }, { actor: "agent" });
+    } catch {
+      // Facts are already persisted; a later run_triage can pick them up.
+    }
+  }
 
   return withCors(NextResponse.json({ ok: true, saved: transcript.length }));
 }

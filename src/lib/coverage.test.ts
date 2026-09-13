@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { runCoverageCheck } from "./coverage";
+import { demoPolicyTerm } from "./demo";
 
 describe("runCoverageCheck", () => {
   const activeComprehensive = {
@@ -53,5 +54,25 @@ describe("runCoverageCheck", () => {
       incidentTime: null,
     });
     expect(result.status).toBe("unclear");
+  });
+
+  it("covers a live intake timestamp on Maya's seeded term", () => {
+    const incidentTime = new Date().toISOString();
+    const result = runCoverageCheck({
+      ...activeComprehensive,
+      ...demoPolicyTerm(new Date(incidentTime)),
+      incidentTime,
+    });
+    expect(result.status).toBe("likely_covered");
+  });
+
+  it("covers the reported Sep 2026 Maya lodge", () => {
+    const incidentTime = "2026-09-13T20:24:00.000Z";
+    const result = runCoverageCheck({
+      ...activeComprehensive,
+      ...demoPolicyTerm(new Date(incidentTime)),
+      incidentTime,
+    });
+    expect(result.status).toBe("likely_covered");
   });
 });

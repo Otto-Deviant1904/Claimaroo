@@ -45,12 +45,13 @@ export function runTriage(input: TriageInput): TriageResult {
   if (input.coverageStatus === "unclear") flags.push("coverage_unclear");
   if (input.analysisConfidence === "low") flags.push("low_analysis_confidence");
 
-  if (input.injuries || input.immediateDanger) {
+  if (input.injuries || input.immediateDanger || input.emergencyServices) {
     return {
       route: "urgent",
-      reason:
-        input.immediateDanger
-          ? "Immediate safety risk reported. Stop ordinary claim processing and escalate."
+      reason: input.immediateDanger
+        ? "Immediate safety risk reported. Stop ordinary claim processing and escalate."
+        : input.emergencyServices
+          ? "Emergency services or an ambulance were reported. Safety override — urgent human handling."
           : "Injury reported. Safety override — urgent human handling.",
       flags,
       recommendedAction:

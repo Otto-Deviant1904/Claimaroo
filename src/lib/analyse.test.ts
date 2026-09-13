@@ -164,10 +164,93 @@ describe("analyseDamage", () => {
     ).toBe(true);
   });
 
+  it("does not treat a generic bumper filename as the rear", async () => {
+    const result = await analyseDamage([
+      {
+        id: "EVD-FRONT",
+        filename: "dented-white-bumper-blogbanner1.jpg",
+        mimeType: "image/jpeg",
+        bytes: null,
+      },
+    ]);
+    expect(result.findings.some((f) => f.area === "rear bumper")).toBe(false);
+    expect(result.findings.some((f) => f.area === "bumper")).toBe(true);
+  });
+
+  it("analyses every uploaded photo instead of stopping at the first local hit", async () => {
+    process.env.LOCAL_VISION_URL = "http://127.0.0.1:9999/analyse";
+    process.env.OPENAI_API_KEY = "sk-test";
+    let visionCalls = 0;
+    const fetchMock = vi.fn(async (url: string) => {
+      if (String(url).includes("9999")) {
+        return {
+          ok: true,
+          json: async () => ({
+            observations: ["Detected bumper damage"],
+            findings: [
+              {
+                area: "bumper",
+                observation: "Detected bumper damage",
+                severity: "moderate",
+              },
+            ],
+          }),
+        };
+      }
+      visionCalls += 1;
+      return {
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                content:
+                  visionCalls === 1
+                    ? "- Rear bumper crushed and misaligned"
+                    : "- Front bumper dented beside the left headlight",
+              },
+            },
+          ],
+        }),
+      };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await analyseDamage([
+      png,
+      {
+        id: "EVD-2",
+        filename: "front-bumper.jpg",
+        mimeType: "image/jpeg",
+        bytes: Buffer.from("fake-front"),
+      },
+    ]);
+
+    expect(
+      fetchMock.mock.calls.filter((call) => String(call[0]).includes("9999"))
+        .length,
+    ).toBe(2);
+    expect(
+      fetchMock.mock.calls.filter((call) =>
+        String(call[0]).includes("/chat/completions"),
+      ).length,
+    ).toBe(2);
+    expect(result.findings.some((f) => f.area === "rear bumper")).toBe(true);
+    expect(result.findings.some((f) => f.area === "front bumper")).toBe(true);
+  });
+
   it("maps vision observation text to mappable vehicle areas", async () => {
     const { areaFromVisionObservation } = await import("./analyse");
     const { mapZone } = await import("./claim-view");
     expect(areaFromVisionObservation("The front bumper is severely damaged.")).toBe(
+      "front bumper",
+    );
+    expect(
+      areaFromVisionObservation(
+        "Front bumper dented beside the left headlight",
+      ),
+    ).toBe("front bumper");
+    expect(areaFromVisionObservation("Grille is cracked and the bonnet is creased.")).toBe(
       "front bumper",
     );
     expect(

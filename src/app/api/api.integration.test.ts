@@ -225,6 +225,40 @@ describe.skipIf(!hasDb)("API routes with database", () => {
     expect((body.result as { claimId: string }).claimId).toBe(claimId);
   });
 
+  it("POST run_coverage_check covers a live Maya intake timestamp", async () => {
+    const incidentTime = new Date().toISOString();
+    const today = incidentTime.slice(0, 10);
+    const policy = await postTool("get_policy", { policy_id: "POL-1001" });
+    const policyBody = await readJson(policy);
+    const record = (
+      policyBody.result as {
+        policy?: { start_date?: string; end_date?: string };
+      }
+    ).policy;
+    expect(record?.start_date && today >= record.start_date).toBe(true);
+    expect(record?.end_date && today <= record.end_date).toBe(true);
+
+    const claimId = `CLM-COVER-${Date.now()}`;
+    const created = await postTool("create_claim", {
+      customer_id: "CUST-MAYA",
+      policy_id: "POL-1001",
+      claim_id: claimId,
+      incident_time: incidentTime,
+      location: "Reported during voice intake",
+      narrative: "Live intake coverage regression.",
+      structured_facts: { incidentType: "collision" },
+    });
+    expect(created.status).toBe(200);
+
+    const coverage = await postTool("run_coverage_check", { claim_id: claimId });
+    const coverageBody = await readJson(coverage);
+    expect(coverage.status).toBe(200);
+    expect(coverageBody.result).toMatchObject({
+      status: "likely_covered",
+      binding: false,
+    });
+  });
+
   it("claim lifecycle: update, evidence, tools, officer actions", async () => {
     const claimId = `CLM-LIFE-${Date.now()}`;
     const created = await postTool("create_claim", {

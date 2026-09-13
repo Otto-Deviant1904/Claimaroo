@@ -9,6 +9,10 @@ export type EvidenceFile = {
 
 export type AnalyzerKind = "local_model" | "vision" | "heuristic";
 
+export type AnalyseOptions = {
+  spokenHint?: string;
+};
+
 export type DamageAnalysis = {
   observations: string[];
   findings: DamageFinding[];
@@ -34,10 +38,22 @@ function heuristicFromFilename(filename: string): DamageFinding[] {
       source: "heuristic",
     });
 
-  if (lower.includes("rear") || lower.includes("bumper")) {
+  if (lower.includes("front") && !lower.includes("rear")) {
+    push(
+      "front bumper",
+      "Filename/label indicates front-end involvement.",
+      lower.includes("severe") ? "severe" : "moderate",
+    );
+  } else if (lower.includes("rear") && !lower.includes("front")) {
     push(
       "rear bumper",
       "Filename/label indicates rear bumper involvement.",
+      lower.includes("severe") ? "severe" : "moderate",
+    );
+  } else if (lower.includes("bumper")) {
+    push(
+      "bumper",
+      "Filename/label indicates bumper damage; front vs rear is unclear from the name.",
       lower.includes("severe") ? "severe" : "moderate",
     );
   }
@@ -144,8 +160,9 @@ function applyVisionLocations(
 async function locateLocalFindings(
   file: EvidenceFile,
   local: DamageAnalysis,
+  options?: AnalyseOptions,
 ): Promise<DamageAnalysis> {
-  const vision = await visionAnalyse(file, local.findings);
+  const vision = await visionAnalyse(file, local.findings, options);
   if (!vision.text) {
     return {
       ...local,
@@ -179,6 +196,7 @@ function resolveVisionProvider(): "openai" | "anthropic" | null {
 async function visionAnalyse(
   file: EvidenceFile,
   localFindings?: DamageFinding[],
+  options?: AnalyseOptions,
 ): Promise<{ text: string | null; error: string | null }> {
   const provider = resolveVisionProvider();
   if (!provider) return { text: null, error: "no_provider" };
@@ -192,8 +210,12 @@ async function visionAnalyse(
         .map((finding) => `${finding.area} (${finding.severity})`)
         .join("; ")}. Do not repeat those labels. Describe what the photo actually shows.`
     : "";
+  const spokenHint = options?.spokenHint?.trim()
+    ? ` Caller account for context only: ${options.spokenHint.trim().slice(0, 400)}. Use the pixels in this photo, not that account, to decide what is shown.`
+    : "";
   const instruction =
-    "You are assisting a motor-claims prototype. Describe only visible vehicle damage in the photo. If you cannot see damage, say so. Return 2-6 factual lines. Start each line with the vehicle area using left/right and front/rear when visible (e.g. left rear door, rear bumper, right front fender). Then describe the visible damage in plain language: dents, creases, scratches, missing paint, misalignment, broken lights. Do not estimate cost. Do not state coverage. Label uncertainty." +
+    "You are assisting a motor-claims prototype. Describe only visible vehicle damage in THIS photo. If you cannot see damage, say so. Return 2-6 factual lines. Start each line with the vehicle area using left/right and front/rear when visible (e.g. left rear door, rear bumper, front bumper, right front fender). If the photo is the front of the vehicle, label it front — never call a front bumper, grille, bonnet, or headlight 'rear'. If it is the rear, label it rear. Then describe the visible damage in plain language: dents, creases, scratches, missing paint, misalignment, broken lights. Do not estimate cost. Do not state coverage. Label uncertainty." +
+    spokenHint +
     locateHint;
 
   try {
@@ -332,6 +354,7 @@ export function areaFromVisionObservation(observation: string): string {
     [/\bleft headlight\b/, "left headlight"],
     [/\bright headlight\b/, "right headlight"],
     [/\bfront bumper\b/, "front bumper"],
+    [/\b(grille|hood|bonnet)\b/, "front bumper"],
     [/\brear bumper\b/, "rear bumper"],
     [/\btailgate\b/, "rear bumper"],
     [/\b(bed|tray|load.?bed)\b/, "rear bumper"],
@@ -348,10 +371,15 @@ export function areaFromVisionObservation(observation: string): string {
     [/\bfront\b/, "front bumper"],
     [/\brear\b/, "rear bumper"],
   ];
+  let best: { index: number; label: string } | null = null;
   for (const [re, label] of patterns) {
-    if (re.test(lower)) return label;
+    const match = re.exec(lower);
+    if (match == null) continue;
+    if (best == null || match.index < best.index) {
+      best = { index: match.index, label };
+    }
   }
-  return "observed";
+  return best?.label ?? "observed";
 }
 
 function findingsFromVisionText(text: string): DamageFinding[] {
@@ -421,48 +449,30 @@ function heuristicAnalysis(files: EvidenceFile[]): DamageAnalysis {
   };
 }
 
-/**
- * Isolated contract for damage analysis. Swap in a custom/local classifier
- * by setting LOCAL_VISION_URL or by changing only this module.
- */
-export async function analyseDamage(files: EvidenceFile[]): Promise<DamageAnalysis> {
-  if (files.length === 0) {
+const EMPTY_ANALYSIS: DamageAnalysis = {
+  observations: [],
+  findings: [],
+  confidence: "low",
+  limitations:
+    "No evidence files were supplied. Analysis cannot run. This is not a damage finding.",
+  usedVisionModel: false,
+  usedLocalModel: false,
+  analyzer: "heuristic",
+};
+
+async function analyseSingleFile(
+  file: EvidenceFile,
+  options?: AnalyseOptions,
+): Promise<DamageAnalysis> {
+  const local = await localModelAnalyse(file);
+  if (local) return locateLocalFindings(file, local, options);
+
+  const vision = await visionAnalyse(file, undefined, options);
+  if (vision.text) {
+    const findings = findingsFromVisionText(vision.text);
     return {
-      observations: [],
-      findings: [],
-      confidence: "low",
-      limitations:
-        "No evidence files were supplied. Analysis cannot run. This is not a damage finding.",
-      usedVisionModel: false,
-      usedLocalModel: false,
-      analyzer: "heuristic",
-    };
-  }
-
-  for (const file of files) {
-    const local = await localModelAnalyse(file);
-    if (local) {
-      return locateLocalFindings(file, local);
-    }
-  }
-
-  const visionNotes: string[] = [];
-  let usedVision = false;
-  for (const file of files) {
-    const vision = await visionAnalyse(file);
-    if (vision.text) {
-      usedVision = true;
-      visionNotes.push(vision.text);
-    }
-  }
-
-  if (usedVision) {
-    const findings = visionNotes.flatMap(findingsFromVisionText);
-    return {
-      observations: visionNotes,
-      findings: findings.length
-        ? findings
-        : files.flatMap((f) => heuristicFromFilename(f.filename)),
+      observations: [vision.text],
+      findings: findings.length ? findings : heuristicFromFilename(file.filename),
       confidence: "medium",
       limitations:
         "Vision output is a model observation of uploaded pixels only. Lighting, angle, and concealment can hide damage. Not a repairer inspection. Preliminary.",
@@ -472,5 +482,56 @@ export async function analyseDamage(files: EvidenceFile[]): Promise<DamageAnalys
     };
   }
 
-  return heuristicAnalysis(files);
+  return heuristicAnalysis([file]);
+}
+
+export function mergeDamageAnalyses(results: DamageAnalysis[]): DamageAnalysis {
+  if (results.length === 0) return EMPTY_ANALYSIS;
+  if (results.length === 1) return results[0];
+
+  const rank = { low: 0, medium: 1, high: 2 } as const;
+  const confidence = results.reduce<ConfidenceLevel>((worst, result) => {
+    return rank[result.confidence] < rank[worst] ? result.confidence : worst;
+  }, "high");
+
+  const usedVisionModel = results.some((result) => result.usedVisionModel);
+  const usedLocalModel = results.some((result) => result.usedLocalModel);
+  const analyzer: AnalyzerKind = results.some((result) => result.analyzer === "vision")
+    ? "vision"
+    : results.some((result) => result.analyzer === "local_model")
+      ? "local_model"
+      : "heuristic";
+
+  return {
+    observations: results.flatMap((result) => result.observations),
+    findings: results.flatMap((result) => result.findings),
+    confidence,
+    limitations: [...new Set(results.map((result) => result.limitations))].join(" "),
+    usedVisionModel,
+    usedLocalModel,
+    analyzer,
+  };
+}
+
+export async function analyseEachFile(
+  files: EvidenceFile[],
+  options?: AnalyseOptions,
+): Promise<DamageAnalysis[]> {
+  const results: DamageAnalysis[] = [];
+  for (const file of files) {
+    results.push(await analyseSingleFile(file, options));
+  }
+  return results;
+}
+
+/**
+ * Isolated contract for damage analysis. Swap in a custom/local classifier
+ * by setting LOCAL_VISION_URL or by changing only this module.
+ */
+export async function analyseDamage(
+  files: EvidenceFile[],
+  options?: AnalyseOptions,
+): Promise<DamageAnalysis> {
+  if (files.length === 0) return EMPTY_ANALYSIS;
+  return mergeDamageAnalyses(await analyseEachFile(files, options));
 }

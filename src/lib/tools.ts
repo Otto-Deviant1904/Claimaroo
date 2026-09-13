@@ -7,12 +7,13 @@ import {
   evidence,
   policies,
 } from "@/db/schema";
-import { analyseDamage } from "@/lib/analyse";
+import { analyseEachFile, mergeDamageAnalyses } from "@/lib/analyse";
 import { recordAudit, type AuditActor } from "@/lib/audit";
 import { runCoverageCheck } from "@/lib/coverage";
 import { estimateRepair } from "@/lib/estimate";
 import { newId } from "@/lib/format";
 import { missingRequiredFields, runTriage } from "@/lib/triage";
+import { applyInferredIntake } from "@/lib/transcript-facts";
 import type {
   StructuredFacts,
   ToolName,
@@ -305,7 +306,7 @@ async function attachEvidence(input: Record<string, unknown>) {
 async function analyseDamageTool(input: Record<string, unknown>) {
   const db = getDb();
   const claimId = requireClaimId(input);
-  await mustClaim(claimId);
+  const claim = await mustClaim(claimId);
   const ids = asStringArray(input.evidence_ids ?? input.evidenceIds);
   const rows = await db
     .select()
@@ -320,19 +321,30 @@ async function analyseDamageTool(input: Record<string, unknown>) {
     }),
   );
 
-  const analysis = await analyseDamage(files);
+  const spokenHint = (claim.transcript ?? [])
+    .filter((entry) => entry.role === "user")
+    .map((entry) => entry.text)
+    .join(" ")
+    .trim()
+    .slice(0, 400);
+
+  const perFile = await analyseEachFile(files, {
+    ...(spokenHint ? { spokenHint } : {}),
+  });
+  const analysis = mergeDamageAnalyses(perFile);
   const estimate = estimateRepair(analysis.findings);
 
-  for (const file of files) {
+  for (const [index, file] of files.entries()) {
+    const fileAnalysis = perFile[index] ?? analysis;
     await db
       .update(evidence)
       .set({
         extractedFacts: {
-          observations: analysis.observations,
-          findings: analysis.findings,
+          observations: fileAnalysis.observations,
+          findings: fileAnalysis.findings,
         },
-        analysisConfidence: analysis.confidence,
-        analysisLimitations: analysis.limitations,
+        analysisConfidence: fileAnalysis.confidence,
+        analysisLimitations: fileAnalysis.limitations,
       })
       .where(eq(evidence.id, file.id));
   }
@@ -433,10 +445,15 @@ async function triageTool(input: Record<string, unknown>) {
     .from(assessments)
     .where(eq(assessments.claimId, claimId));
 
+  const applied = applyInferredIntake(claim, claim.transcript ?? []);
+  const facts = applied.structuredFacts;
+  const location = applied.location;
+  const narrative = applied.narrative;
+
   const missing = missingRequiredFields({
     incidentTime: claim.incidentTime,
-    location: claim.location,
-    narrative: claim.narrative,
+    location,
+    narrative,
   });
 
   const analysisConfidence =
@@ -445,10 +462,10 @@ async function triageTool(input: Record<string, unknown>) {
     null;
 
   const result = runTriage({
-    injuries: claim.structuredFacts.injuries ?? null,
-    injuryDescription: claim.structuredFacts.injuryDescription ?? null,
-    emergencyServices: claim.structuredFacts.emergencyServices ?? null,
-    immediateDanger: claim.structuredFacts.immediateDanger ?? null,
+    injuries: facts.injuries,
+    injuryDescription: facts.injuryDescription,
+    emergencyServices: facts.emergencyServices,
+    immediateDanger: facts.immediateDanger,
     conflictingAccounts: claim.structuredFacts.conflictingAccounts ?? null,
     missingRequiredFields: missing,
     coverageStatus: claim.coverageStatus,
@@ -466,6 +483,9 @@ async function triageTool(input: Record<string, unknown>) {
   await db
     .update(claims)
     .set({
+      structuredFacts: facts,
+      location,
+      narrative,
       route: result.route,
       routeReason: result.reason,
       flags: result.flags,

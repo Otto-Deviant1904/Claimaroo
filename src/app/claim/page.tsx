@@ -11,6 +11,10 @@ import {
   type RefObject,
 } from "react";
 import { OrbBreathe } from "@/components/claim/orb-breathe";
+import {
+  FALLBACK_LOCATION,
+  inferIntakeFromTranscript,
+} from "@/lib/transcript-facts";
 import { TOOL_NAMES, type TranscriptEntry, type TranscriptRole } from "@/lib/types";
 import "../claimaroo.css";
 
@@ -173,6 +177,38 @@ function ClaimIntake() {
     }
   }, [logTurn]);
 
+  const runClaimTools = useCallback(
+    async (id: string, names: readonly string[]) => {
+      for (const name of names) {
+        const finish = startActivity(TOOL_LABELS[name] ?? name);
+        try {
+          await fetch(`/api/tools/${name}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ claim_id: id }),
+          });
+          finish("done");
+        } catch {
+          finish("failed");
+        }
+      }
+    },
+    [startActivity],
+  );
+
+  const refreshClaimAfterCall = useCallback(
+    async (id: string) => {
+      await persistTranscript(id, true);
+      await uploadPendingRef.current(id);
+      await runClaimTools(id, [
+        "analyse_damage",
+        "run_coverage_check",
+        "run_triage",
+      ]);
+    },
+    [persistTranscript, runClaimTools],
+  );
+
   const setPhotos = useCallback((updater: (prev: Photo[]) => Photo[]) => {
     setPhotosState((prev) => {
       const next = updater(prev);
@@ -251,6 +287,7 @@ function ClaimIntake() {
         return null;
       }
 
+      const inferred = inferIntakeFromTranscript(transcriptRef.current);
       const finishFiling = startActivity(TOOL_LABELS.create_claim);
       const createResponse = await fetch("/api/tools/create_claim", {
         method: "POST",
@@ -258,11 +295,15 @@ function ClaimIntake() {
         body: JSON.stringify({
           customer_id: customerResult.customer.id,
           policy_id: customerResult.policy_ids[0],
-          incident_time: new Date().toISOString(),
-          location: "Reported during voice intake",
+          incident_time: inferred.incidentTime,
+          location: inferred.location ?? FALLBACK_LOCATION,
           narrative:
+            inferred.narrative ??
             "Voice session ended without an agent create_claim tool call. Claim lodged from the intake page using the customer mobile on file.",
-          structured_facts: { incidentType: "collision" },
+          structured_facts: {
+            incidentType: "collision",
+            ...inferred.facts,
+          },
         }),
       });
       const createBody = (await createResponse.json()) as ToolBody;
@@ -280,30 +321,13 @@ function ClaimIntake() {
         "Voice session ended before the agent could file the claim. The intake page filed it using the policy mobile on record.",
         "create_claim",
       );
-      await uploadPendingRef.current(createdId);
-      void persistTranscript(createdId, true);
-      // Mirror the tooled agent flow: analyse, coverage, triage. Best-effort —
-      // a filed claim with partial enrichment beats a failed lodge.
-      for (const name of ["analyse_damage", "run_coverage_check", "run_triage"] as const) {
-        const finish = startActivity(TOOL_LABELS[name]);
-        try {
-          await fetch(`/api/tools/${name}`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ claim_id: createdId }),
-          });
-          finish("done");
-        } catch {
-          finish("failed");
-          // Enrichment is best-effort after fallback lodge.
-        }
-      }
+      await refreshClaimAfterCall(createdId);
       return createdId;
     } finally {
       lodgingFallbackRef.current = false;
       setFilingFallback(false);
     }
-  }, [logTurn, persistTranscript, setClaimId, startActivity]);
+  }, [logTurn, refreshClaimAfterCall, setClaimId, startActivity]);
 
   const lodgeFallbackRef = useRef(lodgeFallbackIfNeeded);
   useEffect(() => {
@@ -318,14 +342,13 @@ function ClaimIntake() {
       void (async () => {
         if (!claimIdRef.current) {
           await lodgeFallbackRef.current();
-        }
-        if (claimIdRef.current) {
-          await persistTranscript(claimIdRef.current, true);
+        } else {
+          await refreshClaimAfterCall(claimIdRef.current);
         }
         setLodged(true);
       })();
     }
-  }, [status, persistTranscript]);
+  }, [refreshClaimAfterCall, status]);
 
   useEffect(() => {
     if (lodged) lodgedHeadingRef.current?.focus();
@@ -517,10 +540,13 @@ function ClaimIntake() {
             );
             if (updated.error) setUploadError(updated.error);
           }
+          if (photosRef.current.some((photo) => photo.evidenceId)) {
+            await runClaimTools(existingId, ["analyse_damage"]);
+          }
         })();
       }
     },
-    [setPhotos, downscaleImage, uploadOne],
+    [setPhotos, downscaleImage, runClaimTools, uploadOne],
   );
 
   const removePhoto = useCallback(
