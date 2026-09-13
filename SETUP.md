@@ -28,4 +28,39 @@ The customer must add at least one photo before Start the call. Bytes stay in th
 
 ## Phone / microphone
 
-Camera, library, and microphone need `localhost` or `https`. A bare `http://192.168.x.x` LAN IP will silently fail `getUserMedia`. For a phone demo use the Render URL or a tunnel.
+Camera, library, and microphone need `localhost` or `https`. A bare `http://192.168.x.x` LAN IP will silently fail `getUserMedia`. For a phone demo use the Render or Vercel URL, or a tunnel.
+
+## Tests
+
+See [`docs/test-plan.md`](docs/test-plan.md).
+
+```bash
+npm test              # unit (no database)
+npm run test:api      # every API route (needs DATABASE_URL + seed)
+npm run test:e2e      # Playwright pages (needs DATABASE_URL + seed)
+npm run test:all
+BASE_URL=https://your-host npm run smoke
+```
+
+## Deploy (Render or Vercel)
+
+The Next.js app is the website. Postgres is separate (`DATABASE_URL`). Do not host the Next app on Supabase; you can use Supabase **as the database**.
+
+Required for a working demo:
+
+- `DATABASE_URL` — hosted Postgres URI with `sslmode=require`. Use the **direct / session** port **5432**, not the transaction pooler (**6543**).
+- `ELEVENLABS_AGENT_ID`
+- `ELEVENLABS_AGENT_PUBLIC=true` (leave `ELEVENLABS_API_KEY` empty while the agent is public)
+
+Run schema + seed **once** against that database:
+
+```bash
+DATABASE_URL='postgresql://…?sslmode=require' npm run db:release
+```
+
+**Render:** Blueprint in `render.yaml`. `DATABASE_URL` is attached automatically if you use the Blueprint database, or paste a Supabase/Neon URI instead.
+
+**Vercel:** Import the GitHub repo. Set the same env vars. Vercel does not include Postgres. Hobby multipart uploads cap around **4.5MB**; the app still allows 10MB on Render. `analyse_damage` may need a 60s function limit (Pro) if a cloud vision key is set.
+
+Phone and PC open the **https Next.js origin** (`/claim`, `/claims`), not `*.supabase.co`.
+
