@@ -169,34 +169,43 @@ async function locateLocalFindings(
   file: EvidenceFile,
   local: DamageAnalysis,
 ): Promise<DamageAnalysis> {
-  const text = await visionAnalyse(file, local.findings);
-  if (!text) return local;
-  const findings = applyVisionLocations(local.findings, text);
+  const vision = await visionAnalyse(file, local.findings);
+  if (!vision.text) {
+    return {
+      ...local,
+      limitations: vision.error
+        ? `${local.limitations} Vision locate failed (${vision.error}).`
+        : local.limitations,
+    };
+  }
+  const findings = applyVisionLocations(local.findings, vision.text);
   return {
     ...local,
     findings,
-    observations: [...local.observations, text],
+    observations: [...local.observations, vision.text],
     usedVisionModel: true,
     limitations:
       "Local model detected damage; a vision model assigned location on the vehicle. Lighting, angle, and concealment can hide damage. Not a repairer inspection. Preliminary, not binding.",
   };
 }
 
+function resolveVisionProvider(): "openai" | "anthropic" | null {
+  const raw = (process.env.LLM_PROVIDER || "").trim().toLowerCase();
+  if (raw === "anthropic" && process.env.ANTHROPIC_API_KEY) return "anthropic";
+  if (process.env.OPENAI_API_KEY) return "openai";
+  if (process.env.ANTHROPIC_API_KEY) return "anthropic";
+  return null;
+}
+
 async function visionAnalyse(
   file: EvidenceFile,
   localFindings?: DamageFinding[],
-): Promise<string | null> {
-  const provider =
-    process.env.LLM_PROVIDER ||
-    (process.env.OPENAI_API_KEY
-      ? "openai"
-      : process.env.ANTHROPIC_API_KEY
-        ? "anthropic"
-        : null);
-  if (!provider) return null;
-  if (!file.bytes) return null;
+): Promise<{ text: string | null; error: string | null }> {
+  const provider = resolveVisionProvider();
+  if (!provider) return { text: null, error: "no_provider" };
+  if (!file.bytes) return { text: null, error: "no_bytes" };
   const mime = file.mimeType;
-  if (!isRasterImage(mime)) return null;
+  if (!isRasterImage(mime)) return { text: null, error: "not_raster" };
   const b64 = file.bytes.toString("base64");
 
   const locateHint = localFindings?.length
@@ -235,15 +244,27 @@ async function visionAnalyse(
       if (baseUrl.includes("deepseek.com")) {
         payload.thinking = { type: "disabled" };
       }
-      const res = await fetch(`${baseUrl}/chat/completions`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(payload),
-      });
-      if (!res.ok) return null;
+      const request = async (body: Record<string, unknown>) =>
+        fetch(`${baseUrl}/chat/completions`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(body),
+        });
+      let res = await request(payload);
+      if (!res.ok) {
+        const err = await res.text();
+        if (res.status === 400 && /max_tokens/.test(err)) {
+          delete payload.max_tokens;
+          payload.max_completion_tokens = 800;
+          res = await request(payload);
+        } else {
+          return { text: null, error: `openai_http_${res.status}` };
+        }
+      }
+      if (!res.ok) return { text: null, error: `openai_http_${res.status}` };
       const json = (await res.json()) as {
         choices?: {
           message?: {
@@ -271,7 +292,9 @@ async function visionAnalyse(
       if (!content?.trim() && typeof message?.reasoning_content === "string") {
         content = message.reasoning_content;
       }
-      return content?.trim() ? content : null;
+      return content?.trim()
+        ? { text: content, error: null }
+        : { text: null, error: "empty_vision_text" };
     }
 
     if (provider === "anthropic" && process.env.ANTHROPIC_API_KEY) {
@@ -299,16 +322,19 @@ async function visionAnalyse(
           ],
         }),
       });
-      if (!res.ok) return null;
+      if (!res.ok) return { text: null, error: `anthropic_http_${res.status}` };
       const json = (await res.json()) as {
         content?: { type: string; text?: string }[];
       };
-      return json.content?.find((c) => c.type === "text")?.text ?? null;
+      const text = json.content?.find((c) => c.type === "text")?.text ?? null;
+      return text?.trim()
+        ? { text, error: null }
+        : { text: null, error: "empty_vision_text" };
     }
   } catch {
-    return null;
+    return { text: null, error: "vision_request_failed" };
   }
-  return null;
+  return { text: null, error: "no_provider" };
 }
 
 /** Map free-text vision lines onto area labels the officer damage map understands. */
@@ -435,10 +461,10 @@ export async function analyseDamage(files: EvidenceFile[]): Promise<DamageAnalys
   const visionNotes: string[] = [];
   let usedVision = false;
   for (const file of files) {
-    const text = await visionAnalyse(file);
-    if (text) {
+    const vision = await visionAnalyse(file);
+    if (vision.text) {
       usedVision = true;
-      visionNotes.push(text);
+      visionNotes.push(vision.text);
     }
   }
 
