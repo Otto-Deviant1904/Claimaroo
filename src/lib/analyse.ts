@@ -74,6 +74,7 @@ type LocalModelResponse = {
     observation?: string;
     severity?: DamageFinding["severity"];
   }[];
+  confidence?: "low" | "medium" | "high";
 };
 
 async function localModelAnalyse(file: EvidenceFile): Promise<DamageAnalysis | null> {
@@ -116,7 +117,10 @@ async function localModelAnalyse(file: EvidenceFile): Promise<DamageAnalysis | n
             severity: "unknown" as const,
             source: "local_model" as const,
           })),
-      confidence: "medium",
+      confidence:
+        json.confidence === "low" || json.confidence === "high"
+          ? json.confidence
+          : "medium",
       limitations:
         "Findings came from a local damage model. Lighting, angle, and concealment can hide damage. Not a repairer inspection. Preliminary, not binding.",
       usedVisionModel: false,
