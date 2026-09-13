@@ -43,7 +43,14 @@ export function getSql(): Sql {
     );
   }
   if (!globalForDb.claimsSql) {
-    globalForDb.claimsSql = postgres(url, { max: 5, ssl: sslFor(url) });
+    // Supabase session pooler caps clients at 15. Vercel keeps lambdas warm,
+    // so each instance must release its slots when idle or the pooler starves.
+    globalForDb.claimsSql = postgres(url, {
+      max: 3,
+      idle_timeout: 20,
+      max_lifetime: 60 * 5,
+      ssl: sslFor(url),
+    });
   }
   return globalForDb.claimsSql;
 }
