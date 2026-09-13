@@ -21,6 +21,8 @@ describe("mapZone", () => {
   it("maps explicit sides and lights", () => {
     expect(mapZone("left door")).toBe("left side");
     expect(mapZone("right side panel")).toBe("right side");
+    expect(mapZone("driver's side door")).toBe("right side");
+    expect(mapZone("passenger door")).toBe("left side");
     expect(mapZone("right headlight")).toBe("right headlight");
     expect(mapZone("windscreen crack")).toBe("windscreen");
     expect(mapZone("roof dent")).toBe("roof");

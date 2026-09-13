@@ -94,8 +94,8 @@ export type ClaimView = {
 
 export function mapZone(area: string | null | undefined): DamageZone | null {
   const a = String(area || "").toLowerCase();
-  const left = /\bleft\b/.test(a);
-  const right = /\bright\b/.test(a);
+  const left = /\b(left|passenger'?s?|nearside)\b/.test(a);
+  const right = /\b(right|driver'?s?|offside)\b/.test(a);
   if (/\b(headlight|headlights|light cluster)\b/.test(a)) {
     if (left && !right) return "left headlight";
     if (right && !left) return "right headlight";

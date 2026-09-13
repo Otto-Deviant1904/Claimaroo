@@ -132,7 +132,60 @@ async function localModelAnalyse(file: EvidenceFile): Promise<DamageAnalysis | n
   }
 }
 
-async function visionAnalyse(file: EvidenceFile): Promise<string | null> {
+function partKey(text: string): string | null {
+  const lower = text.toLowerCase();
+  if (/\b(door|doors)\b/.test(lower)) return "door";
+  if (/\b(fender|wing|quarter)\b/.test(lower)) return "fender";
+  if (/\b(bumper|tailgate)\b/.test(lower)) return "bumper";
+  if (/\bheadlight\b/.test(lower)) return "headlight";
+  if (/\b(windscreen|windshield)\b/.test(lower)) return "windscreen";
+  if (/\broof\b/.test(lower)) return "roof";
+  return null;
+}
+
+function applyVisionLocations(
+  localFindings: DamageFinding[],
+  visionText: string,
+): DamageFinding[] {
+  const located = findingsFromVisionText(visionText).filter(
+    (finding) => finding.area !== "observed",
+  );
+  if (located.length === 0) return localFindings;
+  return localFindings.map((finding, index) => {
+    const part = partKey(`${finding.area} ${finding.observation}`);
+    const match =
+      (part
+        ? located.find((candidate) =>
+            partKey(`${candidate.area} ${candidate.observation}`) === part,
+          )
+        : undefined) ??
+      located[index] ??
+      located[0];
+    return { ...finding, area: match.area };
+  });
+}
+
+async function locateLocalFindings(
+  file: EvidenceFile,
+  local: DamageAnalysis,
+): Promise<DamageAnalysis> {
+  const text = await visionAnalyse(file, local.findings);
+  if (!text) return local;
+  const findings = applyVisionLocations(local.findings, text);
+  return {
+    ...local,
+    findings,
+    observations: [...local.observations, text],
+    usedVisionModel: true,
+    limitations:
+      "Local model detected damage; a vision model assigned location on the vehicle. Lighting, angle, and concealment can hide damage. Not a repairer inspection. Preliminary, not binding.",
+  };
+}
+
+async function visionAnalyse(
+  file: EvidenceFile,
+  localFindings?: DamageFinding[],
+): Promise<string | null> {
   const provider =
     process.env.LLM_PROVIDER ||
     (process.env.OPENAI_API_KEY
@@ -146,8 +199,14 @@ async function visionAnalyse(file: EvidenceFile): Promise<string | null> {
   if (!isRasterImage(mime)) return null;
   const b64 = file.bytes.toString("base64");
 
+  const locateHint = localFindings?.length
+    ? ` A local damage model already detected: ${localFindings
+        .map((finding) => `${finding.area} — ${finding.observation} (${finding.severity})`)
+        .join("; ")}. Use the photo to assign each detection a specific vehicle area with left/right and front/rear when visible (for example: left rear door, right front fender, rear bumper, left headlight). Start each line with that area.`
+    : "";
   const instruction =
-    "You are assisting a motor-claims prototype. Describe only visible vehicle damage. If you cannot see damage, say so. Return 2-6 short factual observations. Start each line with the vehicle area (e.g. front bumper, left headlight, rear door). Do not estimate cost. Do not state coverage. Label uncertainty.";
+    "You are assisting a motor-claims prototype. Describe only visible vehicle damage. If you cannot see damage, say so. Return 2-6 short factual observations. Start each line with the vehicle area (e.g. front bumper, left headlight, rear door). Do not estimate cost. Do not state coverage. Label uncertainty." +
+    locateHint;
 
   try {
     if (provider === "openai" && process.env.OPENAI_API_KEY) {
@@ -260,8 +319,12 @@ export function areaFromVisionObservation(observation: string): string {
     [/\bright headlight\b/, "right headlight"],
     [/\bfront bumper\b/, "front bumper"],
     [/\brear bumper\b/, "rear bumper"],
-    [/\bleft (door|wing|fender|quarter|mirror)\b/, "left door"],
-    [/\bright (door|wing|fender|quarter|mirror)\b/, "right door"],
+    [/\btailgate\b/, "rear bumper"],
+    [/\b(bed|tray|load.?bed)\b/, "rear bumper"],
+    [/\bleft (door|wing|fender|quarter|mirror|side|panel)\b/, "left door"],
+    [/\bright (door|wing|fender|quarter|mirror|side|panel)\b/, "right door"],
+    [/\b(driver'?s?|offside)\b/, "right door"],
+    [/\b(passenger'?s?|nearside)\b/, "left door"],
     [/\b(windscreen|windshield)\b/, "windscreen"],
     [/\broof\b/, "roof"],
     [/\bfront\b.{0,24}\bleft\b|\bleft\b.{0,24}\bfront\b/, "front left panel"],
@@ -283,6 +346,9 @@ function findingsFromVisionText(text: string): DamageFinding[] {
     .map((l) => l.replace(/^[-*\d.\s]+/, "").trim())
     .filter(Boolean)
     .filter((l) => !/^uncertainty\b/i.test(l))
+    .filter((l) => !/^overall\b/i.test(l))
+    .filter((l) => !/^area of impact\b/i.test(l))
+    .filter((l) => !/\bno visible damage\b/i.test(l))
     .filter((l) => !/^(none|n\/a)\.?$/i.test(l))
     .slice(0, 6);
   return lines.map((observation) => {
@@ -361,7 +427,9 @@ export async function analyseDamage(files: EvidenceFile[]): Promise<DamageAnalys
 
   for (const file of files) {
     const local = await localModelAnalyse(file);
-    if (local) return local;
+    if (local) {
+      return locateLocalFindings(file, local);
+    }
   }
 
   const visionNotes: string[] = [];
