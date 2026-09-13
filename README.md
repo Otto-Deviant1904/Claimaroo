@@ -8,8 +8,15 @@ A voice-first AI claims employee for Australian motor insurance. A policyholder 
 
 This is a working prototype (Forward 2026 hackathon), not a production insurer integration. All customers, policies, and evidence are synthetic.
 
+## Demo
+
+Voice intake through to a decision-ready officer case.
+
+https://github.com/user-attachments/assets/1cab31ca-6ca5-44bd-9d6a-52a8be7856ed
+
 ## Table of contents
 
+- [Demo](#demo)
 - [Key features](#key-features)
 - [Tech stack](#tech-stack)
 - [Prerequisites](#prerequisites)
