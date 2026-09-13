@@ -6,7 +6,15 @@ import { recordAudit } from "@/lib/audit";
 import { newId } from "@/lib/format";
 
 export async function POST(request: Request) {
-  const form = await request.formData();
+  let form: FormData;
+  try {
+    form = await request.formData();
+  } catch {
+    return NextResponse.json(
+      { error: "Expected multipart/form-data with claimId and file" },
+      { status: 400 },
+    );
+  }
   const claimId = String(form.get("claimId") ?? "");
   const file = form.get("file");
   if (!claimId) {
