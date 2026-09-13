@@ -15,8 +15,8 @@ import {
   routeTone,
   statusTone,
   timeLabel,
-  type ClaimView,
 } from "@/lib/claim-view";
+import type { ClaimListItem } from "@/lib/claim-list";
 
 function Badge({
   text,
@@ -32,7 +32,7 @@ export function ClaimsInbox({
   claims,
   error,
 }: {
-  claims: ClaimView[];
+  claims: ClaimListItem[];
   error: string | null;
 }) {
   const [search, setSearch] = useState("");
