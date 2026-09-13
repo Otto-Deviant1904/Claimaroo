@@ -88,10 +88,14 @@ function ClaimIntake() {
   const [lodged, setLodged] = useState(false);
   const [libraryOver, setLibraryOver] = useState(false);
   const [sessionUserId, setSessionUserId] = useState<string | null>(null);
+  const [phone, setPhone] = useState("0412 000 001");
+  const [filingFallback, setFilingFallback] = useState(false);
 
   const photosRef = useRef<Photo[]>([]);
   const claimIdRef = useRef<string | null>(null);
+  const phoneRef = useRef(phone);
   const hasConnectedRef = useRef(false);
+  const lodgingFallbackRef = useRef(false);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const libraryInputRef = useRef<HTMLInputElement>(null);
   const lodgedHeadingRef = useRef<HTMLHeadingElement>(null);
@@ -114,6 +118,10 @@ function ClaimIntake() {
   }, [photos]);
 
   useEffect(() => {
+    phoneRef.current = phone;
+  }, [phone]);
+
+  useEffect(() => {
     return () => {
       for (const photo of photosRef.current) {
         URL.revokeObjectURL(photo.previewUrl);
@@ -130,9 +138,94 @@ function ClaimIntake() {
     return () => window.clearInterval(timer);
   }, [status]);
 
+  const lodgeFallbackIfNeeded = useCallback(async () => {
+    if (claimIdRef.current || lodgingFallbackRef.current) {
+      return claimIdRef.current;
+    }
+    const phoneValue = phoneRef.current.trim();
+    if (!phoneValue) return null;
+
+    lodgingFallbackRef.current = true;
+    setFilingFallback(true);
+
+    try {
+      const customerResponse = await fetch("/api/tools/get_customer", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: phoneValue }),
+      });
+      const customerBody = (await customerResponse.json()) as ToolBody;
+      const customerResult = customerBody.result as
+        | {
+            found?: boolean;
+            customer?: { id?: string };
+            policy_ids?: string[];
+          }
+        | undefined;
+      if (
+        !customerResponse.ok ||
+        customerBody.ok === false ||
+        !customerResult?.found ||
+        !customerResult.customer?.id ||
+        !customerResult.policy_ids?.[0]
+      ) {
+        setError(
+          customerBody.error ??
+            "Could not match that mobile to a seeded customer. Use 0412 000 001 for Maya Chen.",
+        );
+        return null;
+      }
+
+      const createResponse = await fetch("/api/tools/create_claim", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          customer_id: customerResult.customer.id,
+          policy_id: customerResult.policy_ids[0],
+          location: "Reported during voice intake",
+          narrative:
+            "Voice session ended without an agent create_claim tool call. Claim lodged from the intake page using the customer mobile on file.",
+          structured_facts: { incidentType: "collision" },
+        }),
+      });
+      const createBody = (await createResponse.json()) as ToolBody;
+      const createdId = readClaimId(createBody.result);
+      if (!createResponse.ok || createBody.ok === false || !createdId) {
+        setError(createBody.error ?? "Fallback create_claim failed.");
+        return null;
+      }
+
+      setClaimId(createdId);
+      await uploadPendingRef.current(createdId);
+      try {
+        await fetch("/api/tools/analyse_damage", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ claim_id: createdId }),
+        });
+      } catch {
+        // Analysis is best-effort after fallback lodge.
+      }
+      return createdId;
+    } finally {
+      lodgingFallbackRef.current = false;
+      setFilingFallback(false);
+    }
+  }, [setClaimId]);
+
+  const lodgeFallbackRef = useRef(lodgeFallbackIfNeeded);
+  useEffect(() => {
+    lodgeFallbackRef.current = lodgeFallbackIfNeeded;
+  }, [lodgeFallbackIfNeeded]);
+
   useEffect(() => {
     if (status === "disconnected" && hasConnectedRef.current) {
-      setLodged(true);
+      void (async () => {
+        if (!claimIdRef.current) {
+          await lodgeFallbackRef.current();
+        }
+        setLodged(true);
+      })();
     }
   }, [status]);
 
@@ -349,6 +442,13 @@ function ClaimIntake() {
       clientTools,
       onConnect: () => {
         hasConnectedRef.current = true;
+        try {
+          sendContextualUpdate(
+            `Customer mobile on screen: ${phoneRef.current}. ${photosRef.current.length} damage photo(s) are ready locally and will upload after create_claim. You MUST call get_customer with that phone, then create_claim, then attach_evidence and analyse_damage.`,
+          );
+        } catch {
+          // Contextual updates are best-effort.
+        }
       },
       onError: (message) => {
         setError(typeof message === "string" ? message : String(message));
@@ -357,7 +457,7 @@ function ClaimIntake() {
         setError(`The agent called an unknown tool: ${tool.tool_name}`);
       },
     });
-  }, [clientTools, sessionUserId, startSession]);
+  }, [clientTools, sessionUserId, startSession, sendContextualUpdate]);
 
   const reset = useCallback(() => {
     for (const photo of photosRef.current) {
@@ -366,19 +466,26 @@ function ClaimIntake() {
     photosRef.current = [];
     claimIdRef.current = null;
     hasConnectedRef.current = false;
+    lodgingFallbackRef.current = false;
     setPhotosState([]);
     setClaimIdState(null);
     setSessionUserId(null);
     setError(null);
     setUploadError(null);
     setLodged(false);
+    setFilingFallback(false);
     setElapsed(0);
   }, []);
 
   const persistedCount = photos.filter((photo) => photo.evidenceId).length;
   const live = status === "connected";
   const connecting = status === "connecting";
-  const canStart = photos.length > 0 && status === "disconnected" && !lodged;
+  const canStart =
+    photos.length > 0 &&
+    phone.trim().length >= 8 &&
+    status === "disconnected" &&
+    !lodged &&
+    !filingFallback;
 
   return (
     <div className="cl-root">
@@ -410,6 +517,36 @@ function ClaimIntake() {
             <p className="cl-sub">
               Show us the damage, then talk us through what happened. It takes
               about three minutes.
+            </p>
+
+            <label className="cl-privacy" htmlFor="cl-phone" style={{ display: "block", marginTop: 16 }}>
+              Mobile on your policy
+            </label>
+            <input
+              id="cl-phone"
+              className="cl-phone-input"
+              type="tel"
+              inputMode="tel"
+              autoComplete="tel"
+              value={phone}
+              onChange={(event) => setPhone(event.target.value)}
+              placeholder="0412 000 001"
+              aria-describedby="cl-phone-hint"
+              style={{
+                display: "block",
+                width: "100%",
+                marginTop: 8,
+                marginBottom: 8,
+                padding: "12px 14px",
+                borderRadius: 10,
+                border: "1px solid #c9cdd4",
+                fontSize: 16,
+              }}
+            />
+            <p id="cl-phone-hint" className="cl-privacy" style={{ marginTop: 0, marginBottom: 16 }}>
+              Demo: Maya Chen is <strong>0412 000 001</strong>. If the voice agent
+              does not file a claim, we lodge one with this number when the call
+              ends.
             </p>
 
             <div className="cl-step-head">
@@ -581,8 +718,12 @@ function ClaimIntake() {
                 <button
                   type="button"
                   className="cl-btn cl-btn-primary"
-                  disabled={connecting}
-                  aria-disabled={!canStart && !connecting ? true : undefined}
+                  disabled={connecting || filingFallback}
+                  aria-disabled={
+                    (!canStart && !connecting) || filingFallback
+                      ? true
+                      : undefined
+                  }
                   aria-describedby={
                     [
                       !canStart && !connecting ? "cl-start-hint" : null,
@@ -593,16 +734,26 @@ function ClaimIntake() {
                       .join(" ") || undefined
                   }
                   onClick={() => {
-                    if (!canStart || connecting) return;
+                    if (!canStart || connecting || filingFallback) return;
                     void startCall();
                   }}
                 >
-                  {connecting ? "Connecting…" : "Start the call"}
+                  {filingFallback
+                    ? "Filing claim…"
+                    : connecting
+                      ? "Connecting…"
+                      : "Start the call"}
                 </button>
               )}
-              {!canStart && !live && !connecting ? (
+              {filingFallback ? (
+                <p className="cl-privacy" aria-live="polite">
+                  Voice session ended without a filed claim — lodging with your
+                  mobile now…
+                </p>
+              ) : null}
+              {!canStart && !live && !connecting && !filingFallback ? (
                 <p id="cl-start-hint" className="cl-privacy">
-                  Add at least one photo of the damage.
+                  Add at least one photo and keep the policy mobile filled in.
                 </p>
               ) : null}
               {error ? (

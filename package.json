@@ -10,8 +10,12 @@
     "build": "next build",
     "start": "next start --hostname 0.0.0.0",
     "lint": "eslint",
-    "test": "vitest run",
-    "test:watch": "vitest",
+    "test": "vitest run src/lib",
+    "test:watch": "vitest src/lib",
+    "test:api": "vitest run src/app/api/api.integration.test.ts --testTimeout=30000",
+    "test:e2e": "playwright test",
+    "test:all": "npm test && npm run test:api && npm run test:e2e",
+    "smoke": "bash scripts/smoke-apis.sh",
     "db:push": "drizzle-kit push",
     "db:seed": "tsx src/db/seed.ts",
     "db:release": "drizzle-kit push && tsx src/db/seed.ts",
@@ -41,6 +45,7 @@
     "eslint-config-next": "16.3.4",
     "tailwindcss": "^4",
     "typescript": "^5",
-    "vitest": "^3.2.7"
+    "vitest": "^3.2.7",
+    "@playwright/test": "^1.55.0"
   }
 }

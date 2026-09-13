@@ -321,6 +321,7 @@ async function analyseDamageTool(input: Record<string, unknown>) {
   );
 
   const analysis = await analyseDamage(files);
+  const estimate = estimateRepair(analysis.findings);
 
   for (const file of files) {
     await db
@@ -344,14 +345,14 @@ async function analyseDamageTool(input: Record<string, unknown>) {
   const assessmentValues = {
     claimId,
     damageFindings: analysis.findings,
-    assumptions: existingAssessment?.assumptions ?? [],
+    assumptions: estimate.assumptions,
     label: "preliminary" as const,
     missingInformation: files.length
       ? existingAssessment?.missingInformation ?? []
       : ["No photos or documents attached"],
     updatedAt: new Date(),
-    estimateLowCents: existingAssessment?.estimateLowCents ?? null,
-    estimateHighCents: existingAssessment?.estimateHighCents ?? null,
+    estimateLowCents: estimate.lowCents,
+    estimateHighCents: estimate.highCents,
   };
 
   if (existingAssessment) {
@@ -380,6 +381,8 @@ async function analyseDamageTool(input: Record<string, unknown>) {
     used_vision_model: analysis.usedVisionModel,
     used_local_model: analysis.usedLocalModel,
     analyzer: analysis.analyzer,
+    estimate_low_cents: estimate.lowCents,
+    estimate_high_cents: estimate.highCents,
     label: "preliminary",
   };
 }
