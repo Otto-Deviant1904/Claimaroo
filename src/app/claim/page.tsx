@@ -794,45 +794,67 @@ function LodgedView({
   photoCount: number;
   onReset: () => void;
 }) {
+  const filed = Boolean(claimId);
+
   return (
     <>
-      <p className="cl-eyebrow">Claim lodged</p>
+      <p className="cl-eyebrow">{filed ? "Claim lodged" : "Call ended"}</p>
       <h1 ref={headingRef} className="cl-h1" tabIndex={-1}>
-        That&apos;s with an officer now.
+        {filed ? "That's with an officer now." : "No claim was filed."}
       </h1>
-      <p className="cl-sub">Keep this reference handy.</p>
+      <p className="cl-sub">
+        {filed
+          ? "Keep this reference handy."
+          : "The call ended before a claim number was filed, so nothing was sent to the claims team."}
+      </p>
 
-      <article className="cl-card cl-card-pad" style={{ marginTop: 20 }}>
-        <div className="cl-card-head">
-          <h2 className="cl-card-title">Your claim reference</h2>
-          <span className="cl-pill cl-pill-blue">Decision ready</span>
-        </div>
-        {claimId ? (
+      {filed ? (
+        <article className="cl-card cl-card-pad" style={{ marginTop: 20 }}>
+          <div className="cl-card-head">
+            <h2 className="cl-card-title">Your claim reference</h2>
+            <span className="cl-pill cl-pill-blue">Decision ready</span>
+          </div>
           <p className="cl-lodged-ref">{claimId}</p>
-        ) : (
-          <p className="cl-sub">
-            The call ended before a claim number was filed. An officer can still
-            review the workspace.
+          <p className="cl-privacy">
+            {photoCount} photo{photoCount === 1 ? "" : "s"} received
           </p>
-        )}
-        <p className="cl-privacy">
-          {photoCount} photo{photoCount === 1 ? "" : "s"} received
-        </p>
-        <p className="cl-privacy">
-          Your claim has been sent to the claims team.
-        </p>
-      </article>
+          <p className="cl-privacy">
+            Your claim has been sent to the claims team.
+          </p>
+        </article>
+      ) : (
+        <article className="cl-card cl-card-pad" style={{ marginTop: 20 }}>
+          <div className="cl-card-head">
+            <h2 className="cl-card-title">Nothing was sent</h2>
+          </div>
+          <p className="cl-sub">
+            Your photos stayed on your device and were not uploaded.
+          </p>
+          <p className="cl-privacy">
+            To file the claim, lodge again and make sure the mobile number on
+            your policy is filled in before the call — the claim is then filed
+            from this page even if the call drops.
+          </p>
+        </article>
+      )}
 
       <h2 className="cl-card-title" style={{ marginTop: 28 }}>
         What happens next
       </h2>
       <article className="cl-card cl-card-pad" style={{ marginTop: 12 }}>
         <ul className="cl-next-list">
-          <li>
-            {photoCount > 0
-              ? `Your call has been written up as a claim record, not just a recording, and your ${photoCount} photos are attached to it.`
-              : "You can still add photos by opening the claim again or by contacting us. Nothing was assumed from a missing photo."}
-          </li>
+          {filed ? (
+            <li>
+              Your call has been written up as a claim record, not just a
+              recording, and your {photoCount}{" "}
+              {photoCount === 1 ? "photo is" : "photos are"} attached to it.
+            </li>
+          ) : (
+            <li>
+              Because no claim was filed, nothing was assumed from the missing
+              photos or the call — an officer will only see what you lodge next.
+            </li>
+          )}
           <li>
             Anything you were unsure about is flagged for a person to confirm
             with you, rather than assumed.
@@ -848,7 +870,7 @@ function LodgedView({
         <button type="button" onClick={onReset}>
           Lodge another claim
         </button>
-        {claimId ? (
+        {filed ? (
           <Link href={`${WORKSPACE}/${claimId}`}>View claim</Link>
         ) : null}
         <Link href={WORKSPACE}>See the officer&apos;s view</Link>
