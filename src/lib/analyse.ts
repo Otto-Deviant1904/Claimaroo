@@ -219,9 +219,15 @@ async function visionAnalyse(
 
   try {
     if (provider === "openai" && process.env.OPENAI_API_KEY) {
-      const baseUrl = (
+      let baseUrl = (
         process.env.OPENAI_BASE_URL?.trim() || "https://api.openai.com/v1"
       ).replace(/\/+$/, "");
+      if (baseUrl.endsWith("/chat/completions")) {
+        baseUrl = baseUrl.replace(/\/chat\/completions$/, "");
+      }
+      if (baseUrl === "https://api.openai.com") {
+        baseUrl = "https://api.openai.com/v1";
+      }
       const model =
         process.env.OPENAI_VISION_MODEL?.trim() || "gpt-4o-mini";
       const payload: Record<string, unknown> = {
@@ -259,6 +265,9 @@ async function visionAnalyse(
         if (res.status === 400 && /max_tokens/.test(err)) {
           delete payload.max_tokens;
           payload.max_completion_tokens = 800;
+          res = await request(payload);
+        } else if (res.status === 404 && payload.model !== "gpt-4o-mini") {
+          payload.model = "gpt-4o-mini";
           res = await request(payload);
         } else {
           return { text: null, error: `openai_http_${res.status}` };
