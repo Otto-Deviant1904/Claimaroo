@@ -143,38 +143,72 @@ async function visionAnalyse(file: EvidenceFile): Promise<string | null> {
   const b64 = file.bytes.toString("base64");
 
   const instruction =
-    "You are assisting a motor-claims prototype. Describe only visible vehicle damage. If you cannot see damage, say so. Return 2-6 short factual observations. Do not estimate cost. Do not state coverage. Label uncertainty.";
+    "You are assisting a motor-claims prototype. Describe only visible vehicle damage. If you cannot see damage, say so. Return 2-6 short factual observations. Start each line with the vehicle area (e.g. front bumper, left headlight, rear door). Do not estimate cost. Do not state coverage. Label uncertainty.";
 
   try {
     if (provider === "openai" && process.env.OPENAI_API_KEY) {
-      const res = await fetch("https://api.openai.com/v1/chat/completions", {
+      const baseUrl = (
+        process.env.OPENAI_BASE_URL?.trim() || "https://api.openai.com/v1"
+      ).replace(/\/+$/, "");
+      const model =
+        process.env.OPENAI_VISION_MODEL?.trim() || "gpt-4o-mini";
+      const payload: Record<string, unknown> = {
+        model,
+        max_tokens: 800,
+        messages: [
+          {
+            role: "user",
+            content: [
+              { type: "text", text: instruction },
+              {
+                type: "image_url",
+                image_url: { url: `data:${mime};base64,${b64}` },
+              },
+            ],
+          },
+        ],
+      };
+      // DeepSeek flash defaults to thinking mode; disable so output lands in content.
+      if (baseUrl.includes("deepseek.com")) {
+        payload.thinking = { type: "disabled" };
+      }
+      const res = await fetch(`${baseUrl}/chat/completions`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          model: "gpt-4o-mini",
-          max_tokens: 400,
-          messages: [
-            {
-              role: "user",
-              content: [
-                { type: "text", text: instruction },
-                {
-                  type: "image_url",
-                  image_url: { url: `data:${mime};base64,${b64}` },
-                },
-              ],
-            },
-          ],
-        }),
+        body: JSON.stringify(payload),
       });
       if (!res.ok) return null;
       const json = (await res.json()) as {
-        choices?: { message?: { content?: string } }[];
+        choices?: {
+          message?: {
+            content?: string | { type?: string; text?: string }[] | null;
+            reasoning_content?: string | null;
+          };
+        }[];
       };
-      return json.choices?.[0]?.message?.content ?? null;
+      const message = json.choices?.[0]?.message;
+      let content: string | null = null;
+      if (typeof message?.content === "string") {
+        content = message.content;
+      } else if (Array.isArray(message?.content)) {
+        content = message.content
+          .map((part) =>
+            typeof part === "string"
+              ? part
+              : typeof part?.text === "string"
+                ? part.text
+                : "",
+          )
+          .filter(Boolean)
+          .join("\n");
+      }
+      if (!content?.trim() && typeof message?.reasoning_content === "string") {
+        content = message.reasoning_content;
+      }
+      return content?.trim() ? content : null;
     }
 
     if (provider === "anthropic" && process.env.ANTHROPIC_API_KEY) {
@@ -214,24 +248,70 @@ async function visionAnalyse(file: EvidenceFile): Promise<string | null> {
   return null;
 }
 
+/** Map free-text vision lines onto area labels the officer damage map understands. */
+export function areaFromVisionObservation(observation: string): string {
+  const lower = observation.toLowerCase();
+  const patterns: [RegExp, string][] = [
+    [/\bleft headlight\b/, "left headlight"],
+    [/\bright headlight\b/, "right headlight"],
+    [/\bfront bumper\b/, "front bumper"],
+    [/\brear bumper\b/, "rear bumper"],
+    [/\bleft (door|wing|fender|quarter|mirror)\b/, "left door"],
+    [/\bright (door|wing|fender|quarter|mirror)\b/, "right door"],
+    [/\b(windscreen|windshield)\b/, "windscreen"],
+    [/\broof\b/, "roof"],
+    [/\bfront\b.{0,24}\bleft\b|\bleft\b.{0,24}\bfront\b/, "front left panel"],
+    [/\bfront\b.{0,24}\bright\b|\bright\b.{0,24}\bfront\b/, "front right panel"],
+    [/\brear\b.{0,24}\bleft\b|\bleft\b.{0,24}\brear\b/, "left door"],
+    [/\brear\b.{0,24}\bright\b|\bright\b.{0,24}\brear\b/, "right door"],
+    [/\bfront\b/, "front bumper"],
+    [/\brear\b/, "rear bumper"],
+  ];
+  for (const [re, label] of patterns) {
+    if (re.test(lower)) return label;
+  }
+  return "observed";
+}
+
 function findingsFromVisionText(text: string): DamageFinding[] {
   const lines = text
     .split(/\n+/)
     .map((l) => l.replace(/^[-*\d.\s]+/, "").trim())
     .filter(Boolean)
+    .filter((l) => !/^uncertainty\b/i.test(l))
+    .filter((l) => !/^(none|n\/a)\.?$/i.test(l))
     .slice(0, 6);
   return lines.map((observation) => {
     const lower = observation.toLowerCase();
     let severity: DamageFinding["severity"] = "unknown";
-    if (lower.includes("severe") || lower.includes("crumpl") || lower.includes("airbag")) {
+    if (
+      lower.includes("severe") ||
+      lower.includes("crumpl") ||
+      lower.includes("airbag") ||
+      lower.includes("detached") ||
+      lower.includes("dislodged") ||
+      lower.includes("significant impact")
+    ) {
       severity = "severe";
-    } else if (lower.includes("dent") || lower.includes("crack") || lower.includes("smash")) {
+    } else if (
+      lower.includes("dent") ||
+      lower.includes("crack") ||
+      lower.includes("smash") ||
+      lower.includes("deform") ||
+      lower.includes("misaligned") ||
+      lower.includes("hole")
+    ) {
       severity = "moderate";
-    } else if (lower.includes("scratch") || lower.includes("scuff") || lower.includes("minor")) {
+    } else if (
+      lower.includes("scratch") ||
+      lower.includes("scuff") ||
+      lower.includes("abrasion") ||
+      lower.includes("minor")
+    ) {
       severity = "minor";
     }
     return {
-      area: "observed",
+      area: areaFromVisionObservation(observation),
       observation,
       severity,
       source: "vision" as const,
@@ -241,12 +321,16 @@ function findingsFromVisionText(text: string): DamageFinding[] {
 
 function heuristicAnalysis(files: EvidenceFile[]): DamageAnalysis {
   const findings = files.flatMap((f) => heuristicFromFilename(f.filename));
+  const hasVisionKey = Boolean(
+    process.env.OPENAI_API_KEY?.trim() || process.env.ANTHROPIC_API_KEY?.trim(),
+  );
   return {
     observations: findings.map((f) => f.observation),
     findings,
     confidence: "low",
-    limitations:
-      "No local model and no OPENAI_API_KEY or ANTHROPIC_API_KEY was available (or the file is not a raster image), so analysis used filename/label heuristics only. A claims officer must inspect the actual file. Preliminary, not binding.",
+    limitations: hasVisionKey
+      ? "A vision model is configured, but the image analysis request failed or returned no usable text (check OPENAI_BASE_URL, OPENAI_VISION_MODEL, and API key validity). Fell back to filename/label heuristics. A claims officer must inspect the actual file. Preliminary, not binding."
+      : "No local model and no OPENAI_API_KEY or ANTHROPIC_API_KEY was available (or the file is not a raster image), so analysis used filename/label heuristics only. A claims officer must inspect the actual file. Preliminary, not binding.",
     usedVisionModel: false,
     usedLocalModel: false,
     analyzer: "heuristic",

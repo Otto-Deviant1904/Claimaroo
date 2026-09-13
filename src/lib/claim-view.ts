@@ -116,6 +116,10 @@ export function mapZone(area: string | null | undefined): DamageZone | null {
   const rear =
     /\b(rear|taillight|taillights)\b/.test(a) ||
     (/\bbumper\b/.test(a) && /\b(boot|trunk)\b/.test(a));
+  if (/\bbumper\b/.test(a) && !front && !rear) {
+    // Prefer not to guess front vs rear for a bare "bumper".
+    return null;
+  }
   if (front && !rear) return "front";
   if (rear && !front) return "rear";
   return null;
@@ -139,22 +143,60 @@ export function percent(value: number | null) {
 
 export function dateLabel(value: string | null) {
   if (!value) return "Unknown";
-  return new Date(`${value}T12:00:00`).toLocaleDateString("en-AU", {
-    day: "2-digit",
-    month: "short",
+  const date = new Date(`${value}T12:00:00`);
+  if (Number.isNaN(date.getTime())) return value;
+  return formatMelbourneDayMonthYear(date);
+}
+
+const SHORT_MONTHS = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+] as const;
+
+/** Deterministic AEST/AEDT labels — avoids Node vs browser en-AU ICU mismatches (Sep vs Sept). */
+function formatMelbourneDayMonthYear(date: Date) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Australia/Melbourne",
+    day: "numeric",
+    month: "numeric",
     year: "numeric",
-  });
+  }).formatToParts(date);
+  const get = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((part) => part.type === type)?.value ?? "";
+  const day = get("day");
+  const month = SHORT_MONTHS[Number(get("month")) - 1] ?? "";
+  const year = get("year");
+  return `${day} ${month} ${year}`;
 }
 
 export function timeLabel(value: string) {
-  return new Date(value).toLocaleString("en-AU", {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  const parts = new Intl.DateTimeFormat("en-US", {
     timeZone: "Australia/Melbourne",
-    day: "2-digit",
-    month: "short",
+    day: "numeric",
+    month: "numeric",
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,
-  });
+  }).formatToParts(date);
+  const get = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((part) => part.type === type)?.value ?? "";
+  const day = get("day");
+  const month = SHORT_MONTHS[Number(get("month")) - 1] ?? "";
+  const hour = get("hour").padStart(2, "0");
+  const minute = get("minute").padStart(2, "0");
+  return `${day} ${month} at ${hour}:${minute}`;
 }
 
 export function known(value: string | number | boolean | null | undefined) {

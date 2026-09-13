@@ -16,6 +16,14 @@ Both pages declare `const WORKSPACE = "/claims"` at the top. Change that one lin
 ELEVENLABS_AGENT_ID=agent_4301m2aeyrxterxa6h7vc2bnmx9e
 ELEVENLABS_AGENT_PUBLIC=true
 # ELEVENLABS_API_KEY=sk_...      # only once the agent requires auth
+
+# Optional live photo analysis. OpenAI or DeepSeek (OpenAI-compatible) work.
+# DeepSeek:
+#   OPENAI_API_KEY=sk-...
+#   OPENAI_BASE_URL=https://api.deepseek.com
+#   OPENAI_VISION_MODEL=deepseek-flash
+#   LLM_PROVIDER=openai
+# AgentRouter credits do NOT work here (rejects non–Claude-Code clients).
 ```
 
 `/api/elevenlabs/token` returns `{ agentId }` when `ELEVENLABS_AGENT_PUBLIC=true`. Otherwise it mints a conversation token with the API key.
