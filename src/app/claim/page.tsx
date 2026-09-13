@@ -220,6 +220,7 @@ function ClaimIntake() {
         body: JSON.stringify({
           customer_id: customerResult.customer.id,
           policy_id: customerResult.policy_ids[0],
+          incident_time: new Date().toISOString(),
           location: "Reported during voice intake",
           narrative:
             "Voice session ended without an agent create_claim tool call. Claim lodged from the intake page using the customer mobile on file.",
@@ -241,14 +242,18 @@ function ClaimIntake() {
       );
       await uploadPendingRef.current(createdId);
       void persistTranscript(createdId, true);
-      try {
-        await fetch("/api/tools/analyse_damage", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ claim_id: createdId }),
-        });
-      } catch {
-        // Analysis is best-effort after fallback lodge.
+      // Mirror the tooled agent flow: analyse, coverage, triage. Best-effort —
+      // a filed claim with partial enrichment beats a failed lodge.
+      for (const name of ["analyse_damage", "run_coverage_check", "run_triage"] as const) {
+        try {
+          await fetch(`/api/tools/${name}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ claim_id: createdId }),
+          });
+        } catch {
+          // Enrichment is best-effort after fallback lodge.
+        }
       }
       return createdId;
     } finally {
@@ -394,8 +399,34 @@ function ClaimIntake() {
     return tools;
   }, [logTurn, persistTranscript, setClaimId]);
 
+  // Vercel Hobby caps request bodies at ~4.5MB. Re-encode oversized images so
+  // real phone photos upload instead of failing evidence persistence.
+  const downscaleImage = useCallback(async (file: File): Promise<File> => {
+    const LIMIT = 3.5 * 1024 * 1024;
+    if (file.size <= LIMIT || !file.type.startsWith("image/")) return file;
+    try {
+      const bitmap = await createImageBitmap(file);
+      const scale = Math.min(1, 2048 / Math.max(bitmap.width, bitmap.height));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+      canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return file;
+      ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+      const blob = await new Promise<Blob | null>((resolve) =>
+        canvas.toBlob((b) => resolve(b), "image/jpeg", 0.85),
+      );
+      if (!blob || blob.size >= file.size) return file;
+      return new File([blob], file.name.replace(/\.[^.]+$/, "") + ".jpg", {
+        type: "image/jpeg",
+      });
+    } catch {
+      return file;
+    }
+  }, []);
+
   const addFiles = useCallback(
-    (list: FileList | File[]) => {
+    async (list: FileList | File[]) => {
       const incoming = Array.from(list).filter((file) =>
         file.type.startsWith("image/"),
       );
@@ -405,7 +436,11 @@ function ClaimIntake() {
       const accepted = incoming.slice(0, Math.max(0, room));
       if (accepted.length === 0) return;
 
-      const added: Photo[] = accepted.map((file) => ({
+      const processed = await Promise.all(
+        accepted.map((file) => downscaleImage(file)),
+      );
+
+      const added: Photo[] = processed.map((file) => ({
         id: newLocalId(),
         file,
         previewUrl: URL.createObjectURL(file),
@@ -428,7 +463,7 @@ function ClaimIntake() {
         })();
       }
     },
-    [setPhotos, uploadOne],
+    [setPhotos, downscaleImage, uploadOne],
   );
 
   const removePhoto = useCallback(
