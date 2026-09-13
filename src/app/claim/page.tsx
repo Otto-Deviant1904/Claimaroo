@@ -1,0 +1,720 @@
+"use client";
+
+import { ConversationProvider, useConversation } from "@elevenlabs/react";
+import Link from "next/link";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type RefObject,
+} from "react";
+import { OrbBreathe } from "@/components/claim/orb-breathe";
+import { TOOL_NAMES } from "@/lib/types";
+import "../claimaroo.css";
+
+const WORKSPACE = "/claims";
+const PHOTO_CAP = 8;
+
+type Photo = {
+  id: string;
+  file: File;
+  previewUrl: string;
+  uploaded: boolean;
+  uploading: boolean;
+  evidenceId?: string;
+  error?: string;
+};
+
+type TokenResponse = {
+  agentId?: string;
+  conversationToken?: string;
+  error?: string;
+};
+
+type ToolBody = {
+  ok?: boolean;
+  result?: unknown;
+  resultText?: string;
+  error?: string;
+};
+
+type EvidenceBody = {
+  evidenceId?: string;
+  error?: string;
+};
+
+function readClaimId(result: unknown): string | null {
+  if (!result || typeof result !== "object") return null;
+  const record = result as Record<string, unknown>;
+  const id = record.claimId ?? record.claim_id;
+  return typeof id === "string" && id.length > 0 ? id : null;
+}
+
+function formatElapsed(seconds: number): string {
+  const mins = Math.floor(seconds / 60)
+    .toString()
+    .padStart(2, "0");
+  const secs = (seconds % 60).toString().padStart(2, "0");
+  return `${mins}:${secs}`;
+}
+
+function newLocalId(): string {
+  const bytes = new Uint8Array(4);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0"))
+    .join("")
+    .toUpperCase();
+}
+
+export default function ClaimPage() {
+  return (
+    <ConversationProvider>
+      <ClaimIntake />
+    </ConversationProvider>
+  );
+}
+
+function ClaimIntake() {
+  const { status, isSpeaking, startSession, endSession, sendContextualUpdate } =
+    useConversation();
+
+  const [photos, setPhotosState] = useState<Photo[]>([]);
+  const [claimId, setClaimIdState] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [elapsed, setElapsed] = useState(0);
+  const [lodged, setLodged] = useState(false);
+  const [libraryOver, setLibraryOver] = useState(false);
+  const [sessionUserId, setSessionUserId] = useState<string | null>(null);
+
+  const photosRef = useRef<Photo[]>([]);
+  const claimIdRef = useRef<string | null>(null);
+  const hasConnectedRef = useRef(false);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const libraryInputRef = useRef<HTMLInputElement>(null);
+  const lodgedHeadingRef = useRef<HTMLHeadingElement>(null);
+
+  const setPhotos = useCallback((updater: (prev: Photo[]) => Photo[]) => {
+    setPhotosState((prev) => {
+      const next = updater(prev);
+      photosRef.current = next;
+      return next;
+    });
+  }, []);
+
+  const setClaimId = useCallback((id: string) => {
+    claimIdRef.current = id;
+    setClaimIdState(id);
+  }, []);
+
+  useEffect(() => {
+    photosRef.current = photos;
+  }, [photos]);
+
+  useEffect(() => {
+    return () => {
+      for (const photo of photosRef.current) {
+        URL.revokeObjectURL(photo.previewUrl);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (status !== "connected") return;
+    const started = Date.now();
+    const timer = window.setInterval(() => {
+      setElapsed(Math.floor((Date.now() - started) / 1000));
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [status]);
+
+  useEffect(() => {
+    if (status === "disconnected" && hasConnectedRef.current) {
+      setLodged(true);
+    }
+  }, [status]);
+
+  useEffect(() => {
+    if (lodged) lodgedHeadingRef.current?.focus();
+  }, [lodged]);
+
+  const uploadOne = useCallback(async (photo: Photo, id: string): Promise<Photo> => {
+    if (photo.evidenceId || photo.uploaded) return photo;
+
+    setPhotos((prev) =>
+      prev.map((item) =>
+        item.id === photo.id
+          ? { ...item, uploading: true, error: undefined }
+          : item,
+      ),
+    );
+
+    try {
+      const form = new FormData();
+      form.set("claimId", id);
+      form.set("file", photo.file);
+      const response = await fetch("/api/evidence", {
+        method: "POST",
+        body: form,
+      });
+      const body = (await response.json()) as EvidenceBody;
+      if (!response.ok || !body.evidenceId) {
+        throw new Error(body.error ?? "Photo upload failed.");
+      }
+      return {
+        ...photo,
+        uploaded: true,
+        uploading: false,
+        evidenceId: body.evidenceId,
+        error: undefined,
+      };
+    } catch (caught) {
+      const message =
+        caught instanceof Error ? caught.message : "Photo upload failed.";
+      return {
+        ...photo,
+        uploading: false,
+        uploaded: false,
+        error: message,
+      };
+    }
+  }, [setPhotos]);
+
+  const uploadPending = useCallback(
+    async (id: string) => {
+      const pending = photosRef.current.filter(
+        (photo) => !photo.evidenceId && !photo.uploaded,
+      );
+      const failures: string[] = [];
+      for (const photo of pending) {
+        const latest = photosRef.current.find((item) => item.id === photo.id);
+        if (latest?.evidenceId || latest?.uploaded) continue;
+        const updated = await uploadOne(photo, id);
+        setPhotos((prev) =>
+          prev.map((item) => (item.id === updated.id ? updated : item)),
+        );
+        if (updated.error) failures.push(updated.error);
+      }
+      if (failures.length > 0) {
+        setUploadError(failures[0] ?? "Photo upload failed.");
+      } else {
+        setUploadError(null);
+        const ids = photosRef.current
+          .map((photo) => photo.evidenceId)
+          .filter((value): value is string => Boolean(value));
+        if (ids.length > 0) {
+          try {
+            sendContextualUpdate(`Uploaded ${ids.length} photos: ${ids.join(", ")}`);
+          } catch {
+            // Persistence does not depend on the agent receiving this update.
+          }
+        }
+      }
+    },
+    [sendContextualUpdate, setPhotos, uploadOne],
+  );
+
+  const uploadPendingRef = useRef(uploadPending);
+  useEffect(() => {
+    uploadPendingRef.current = uploadPending;
+  }, [uploadPending]);
+
+  const clientTools = useMemo(() => {
+    const tools: Record<
+      string,
+      (parameters: Record<string, unknown>) => Promise<string>
+    > = {};
+    for (const name of TOOL_NAMES) {
+      tools[name] = async (parameters) => {
+        const response = await fetch(`/api/tools/${name}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(parameters),
+        });
+        const body = (await response.json()) as ToolBody;
+        if (name === "create_claim") {
+          const createdId = readClaimId(body.result);
+          if (createdId) {
+            setClaimId(createdId);
+            await uploadPendingRef.current(createdId);
+          }
+        }
+        if (!response.ok || body.ok === false) {
+          return body.error ?? body.resultText ?? `${name} failed`;
+        }
+        return body.resultText ?? JSON.stringify(body.result ?? {});
+      };
+    }
+    return tools;
+  }, [setClaimId]);
+
+  const addFiles = useCallback(
+    (list: FileList | File[]) => {
+      const incoming = Array.from(list).filter((file) =>
+        file.type.startsWith("image/"),
+      );
+      if (incoming.length === 0) return;
+
+      const room = PHOTO_CAP - photosRef.current.length;
+      const accepted = incoming.slice(0, Math.max(0, room));
+      if (accepted.length === 0) return;
+
+      const added: Photo[] = accepted.map((file) => ({
+        id: newLocalId(),
+        file,
+        previewUrl: URL.createObjectURL(file),
+        uploaded: false,
+        uploading: false,
+      }));
+
+      setPhotos((prev) => [...prev, ...added]);
+
+      const existingId = claimIdRef.current;
+      if (existingId) {
+        void (async () => {
+          for (const photo of added) {
+            const updated = await uploadOne(photo, existingId);
+            setPhotos((prev) =>
+              prev.map((item) => (item.id === updated.id ? updated : item)),
+            );
+            if (updated.error) setUploadError(updated.error);
+          }
+        })();
+      }
+    },
+    [setPhotos, uploadOne],
+  );
+
+  const removePhoto = useCallback(
+    (id: string) => {
+      const photo = photosRef.current.find((item) => item.id === id);
+      if (!photo || photo.uploaded || photo.uploading) return;
+      URL.revokeObjectURL(photo.previewUrl);
+      setPhotos((prev) => prev.filter((item) => item.id !== id));
+    },
+    [setPhotos],
+  );
+
+  const retryPhoto = useCallback(
+    async (id: string) => {
+      const existingId = claimIdRef.current;
+      const photo = photosRef.current.find((item) => item.id === id);
+      if (!existingId || !photo || photo.evidenceId) return;
+      const updated = await uploadOne(
+        { ...photo, error: undefined, uploaded: false },
+        existingId,
+      );
+      setPhotos((prev) =>
+        prev.map((item) => (item.id === updated.id ? updated : item)),
+      );
+      setUploadError(updated.error ?? null);
+    },
+    [setPhotos, uploadOne],
+  );
+
+  const startCall = useCallback(async () => {
+    if (photosRef.current.length === 0) return;
+    setError(null);
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      for (const track of stream.getTracks()) track.stop();
+    } catch {
+      setError(
+        "Microphone access was blocked or unavailable. Use localhost or https.",
+      );
+      return;
+    }
+
+    const response = await fetch("/api/elevenlabs/token");
+    const body = (await response.json()) as TokenResponse;
+    if (!response.ok || (!body.agentId && !body.conversationToken)) {
+      setError(body.error ?? "Unable to start the voice session.");
+      return;
+    }
+
+    const session =
+      body.agentId != null
+        ? { agentId: body.agentId }
+        : { conversationToken: body.conversationToken as string };
+
+    const userId = sessionUserId ?? `session-${newLocalId()}`;
+    setSessionUserId(userId);
+
+    startSession({
+      ...session,
+      userId,
+      clientTools,
+      onConnect: () => {
+        hasConnectedRef.current = true;
+      },
+      onError: (message) => {
+        setError(typeof message === "string" ? message : String(message));
+      },
+      onUnhandledClientToolCall: (tool) => {
+        setError(`The agent called an unknown tool: ${tool.tool_name}`);
+      },
+    });
+  }, [clientTools, sessionUserId, startSession]);
+
+  const reset = useCallback(() => {
+    for (const photo of photosRef.current) {
+      URL.revokeObjectURL(photo.previewUrl);
+    }
+    photosRef.current = [];
+    claimIdRef.current = null;
+    hasConnectedRef.current = false;
+    setPhotosState([]);
+    setClaimIdState(null);
+    setSessionUserId(null);
+    setError(null);
+    setUploadError(null);
+    setLodged(false);
+    setElapsed(0);
+  }, []);
+
+  const persistedCount = photos.filter((photo) => photo.evidenceId).length;
+  const live = status === "connected";
+  const connecting = status === "connecting";
+  const canStart = photos.length > 0 && status === "disconnected" && !lodged;
+
+  return (
+    <div className="cl-root">
+      <a className="cl-skip" href="#cl-main">
+        Skip to content
+      </a>
+      <header className="cl-topbar">
+        <Link className="cl-brand" href="/">
+          Claimaroo
+        </Link>
+        <div className="cl-topbar-meta">
+          <span>Customer intake</span>
+          <Link href={WORKSPACE}>Officer workspace</Link>
+        </div>
+      </header>
+
+      <main id="cl-main" className="cl-intake" tabIndex={-1}>
+        {lodged ? (
+          <LodgedView
+            headingRef={lodgedHeadingRef}
+            claimId={claimId}
+            photoCount={persistedCount}
+            onReset={reset}
+          />
+        ) : (
+          <>
+            <p className="cl-eyebrow">Lodge a claim</p>
+            <h1 className="cl-h1">Let&apos;s get your claim started.</h1>
+            <p className="cl-sub">
+              Show us the damage, then talk us through what happened. It takes
+              about three minutes.
+            </p>
+
+            <div className="cl-step-head">
+              <h2>Show us the damage</h2>
+              <span>
+                {photos.length === 0
+                  ? "Up to 8 photos"
+                  : `${photos.length} added`}
+              </span>
+            </div>
+            <p
+              id="cl-photo-hint"
+              className="cl-privacy"
+              style={{ marginTop: 0, marginBottom: 12 }}
+            >
+              Take a clear photo of the damaged area or choose photos you have
+              already taken.
+            </p>
+
+            <div className="cl-photo-actions">
+              <label className="cl-photo-action" htmlFor="cl-photo-camera">
+                Take Photo
+                <span>Rear camera</span>
+                <input
+                  id="cl-photo-camera"
+                  ref={cameraInputRef}
+                  className="cl-visually-hidden"
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  aria-describedby="cl-photo-hint"
+                  onChange={(event) => {
+                    if (event.target.files) addFiles(event.target.files);
+                    event.target.value = "";
+                  }}
+                />
+              </label>
+              <label
+                className={`cl-photo-action${libraryOver ? " cl-over" : ""}`}
+                htmlFor="cl-photo-library"
+                onDragOver={(event) => {
+                  event.preventDefault();
+                  setLibraryOver(true);
+                }}
+                onDragLeave={() => setLibraryOver(false)}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  setLibraryOver(false);
+                  addFiles(event.dataTransfer.files);
+                }}
+              >
+                Choose from Library
+                <span>Existing photos</span>
+                <input
+                  id="cl-photo-library"
+                  ref={libraryInputRef}
+                  className="cl-visually-hidden"
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  aria-describedby="cl-photo-hint"
+                  onChange={(event) => {
+                    if (event.target.files) addFiles(event.target.files);
+                    event.target.value = "";
+                  }}
+                />
+              </label>
+            </div>
+
+            {photos.length > 0 ? (
+              <ul className="cl-thumbs">
+                {photos.map((photo, index) => (
+                  <li key={photo.id} className="cl-thumb">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={photo.previewUrl}
+                      alt={`Damage photo ${index + 1} of ${photos.length}`}
+                    />
+                    {!photo.uploaded && !photo.uploading ? (
+                      <button
+                        type="button"
+                        className="cl-thumb-remove"
+                        aria-label={`Remove damage photo ${index + 1}`}
+                        onClick={() => removePhoto(photo.id)}
+                      >
+                        <RemoveIcon />
+                      </button>
+                    ) : null}
+                    {photo.uploading ? (
+                      <span className="cl-thumb-status">Uploading</span>
+                    ) : null}
+                    {photo.evidenceId ? (
+                      <span className="cl-thumb-status">Saved</span>
+                    ) : null}
+                    {photo.error ? (
+                      <button
+                        type="button"
+                        className="cl-thumb-status cl-failed"
+                        aria-label={`Retry upload for damage photo ${index + 1}`}
+                        onClick={() => void retryPhoto(photo.id)}
+                      >
+                        Retry
+                      </button>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+
+            {photos.length > 0 ? (
+              <p className="cl-privacy" aria-live="polite">
+                {photos.length} photo{photos.length === 1 ? "" : "s"} added. You
+                can add more before starting your call.
+              </p>
+            ) : null}
+
+            <div className="cl-step-head">
+              <h2>Tell us what happened</h2>
+              <span>
+                {live ? "In progress" : connecting ? "Connecting" : "About 3 min"}
+              </span>
+            </div>
+
+            <section
+              className="cl-card cl-call-card"
+              aria-labelledby="cl-call-title"
+              aria-busy={connecting || undefined}
+            >
+              <div className="cl-orb" aria-hidden="true">
+                <OrbBreathe
+                  width={180}
+                  height={180}
+                  dotColor="#16191D"
+                  speed={live ? 70 : 45}
+                />
+              </div>
+              <h2 id="cl-call-title">
+                {live
+                  ? "You're on the call"
+                  : "Speak to our claims assistant"}
+              </h2>
+              <p>
+                {live
+                  ? "Take your time. If you're not sure about something, just say so — we'll flag it rather than guess."
+                  : "The call happens right here in your browser. No phone number, no hold queue."}
+              </p>
+              {live ? (
+                <div className="cl-live-line">
+                  <span className="cl-dot cl-pulse" aria-hidden="true" />
+                  <span aria-hidden="true">{formatElapsed(elapsed)}</span>
+                  <span aria-live="polite">
+                    {isSpeaking ? "Assistant speaking" : "Listening"}
+                  </span>
+                </div>
+              ) : connecting ? (
+                <div className="cl-live-line" aria-live="polite">
+                  Connecting…
+                </div>
+              ) : null}
+              {live ? (
+                <button
+                  type="button"
+                  className="cl-btn cl-btn-danger"
+                  onClick={() => endSession()}
+                >
+                  End the call
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="cl-btn cl-btn-primary"
+                  disabled={connecting}
+                  aria-disabled={!canStart && !connecting ? true : undefined}
+                  aria-describedby={
+                    [
+                      !canStart && !connecting ? "cl-start-hint" : null,
+                      error ? "cl-call-error" : null,
+                      uploadError ? "cl-upload-error" : null,
+                    ]
+                      .filter(Boolean)
+                      .join(" ") || undefined
+                  }
+                  onClick={() => {
+                    if (!canStart || connecting) return;
+                    void startCall();
+                  }}
+                >
+                  {connecting ? "Connecting…" : "Start the call"}
+                </button>
+              )}
+              {!canStart && !live && !connecting ? (
+                <p id="cl-start-hint" className="cl-privacy">
+                  Add at least one photo of the damage.
+                </p>
+              ) : null}
+              {error ? (
+                <div id="cl-call-error" className="cl-error" role="alert">
+                  {error}
+                </div>
+              ) : null}
+              {uploadError ? (
+                <div id="cl-upload-error" className="cl-error" role="alert">
+                  {uploadError}
+                </div>
+              ) : null}
+            </section>
+
+            {sessionUserId ? (
+              <p className="cl-ref-line">Session {sessionUserId}</p>
+            ) : (
+              <p className="cl-ref-line">A claim number is assigned during the call.</p>
+            )}
+            <p className="cl-privacy">
+              We only record what you tell us, and you can stop at any time.
+            </p>
+          </>
+        )}
+      </main>
+    </div>
+  );
+}
+
+function LodgedView({
+  headingRef,
+  claimId,
+  photoCount,
+  onReset,
+}: {
+  headingRef: RefObject<HTMLHeadingElement | null>;
+  claimId: string | null;
+  photoCount: number;
+  onReset: () => void;
+}) {
+  return (
+    <>
+      <p className="cl-eyebrow">Claim lodged</p>
+      <h1 ref={headingRef} className="cl-h1" tabIndex={-1}>
+        That&apos;s with an officer now.
+      </h1>
+      <p className="cl-sub">Keep this reference handy.</p>
+
+      <article className="cl-card cl-card-pad" style={{ marginTop: 20 }}>
+        <div className="cl-card-head">
+          <h2 className="cl-card-title">Your claim reference</h2>
+          <span className="cl-pill cl-pill-blue">Decision ready</span>
+        </div>
+        {claimId ? (
+          <p className="cl-lodged-ref">{claimId}</p>
+        ) : (
+          <p className="cl-sub">
+            The call ended before a claim number was filed. An officer can still
+            review the workspace.
+          </p>
+        )}
+        <p className="cl-privacy">
+          {photoCount} photo{photoCount === 1 ? "" : "s"} received
+        </p>
+        <p className="cl-privacy">
+          Your claim has been sent to the claims team.
+        </p>
+      </article>
+
+      <h2 className="cl-card-title" style={{ marginTop: 28 }}>
+        What happens next
+      </h2>
+      <article className="cl-card cl-card-pad" style={{ marginTop: 12 }}>
+        <ul className="cl-next-list">
+          <li>
+            {photoCount > 0
+              ? `Your call has been written up as a claim record, not just a recording, and your ${photoCount} photos are attached to it.`
+              : "You can still add photos by opening the claim again or by contacting us. Nothing was assumed from a missing photo."}
+          </li>
+          <li>
+            Anything you were unsure about is flagged for a person to confirm
+            with you, rather than assumed.
+          </li>
+          <li>
+            An officer reviews the file and comes back to you with next steps on
+            repairs. Nothing here is a coverage decision yet.
+          </li>
+        </ul>
+      </article>
+
+      <div className="cl-text-links">
+        <button type="button" onClick={onReset}>
+          Lodge another claim
+        </button>
+        {claimId ? (
+          <Link href={`${WORKSPACE}/${claimId}`}>View claim</Link>
+        ) : null}
+        <Link href={WORKSPACE}>See the officer&apos;s view</Link>
+      </div>
+    </>
+  );
+}
+
+function RemoveIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
+      <path
+        d="M2.5 2.5l7 7m0-7l-7 7"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
