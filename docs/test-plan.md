@@ -57,8 +57,8 @@ Guardrails asserted in API tests:
 
 | Route | Checks |
 |---|---|
-| `/` | Title contains Claimaroo; skip link; **File a Insurance Claim** → `/claim`; **Open the officer workspace** → `/claims` |
-| `/claim` | Hint “Add at least one photo and keep the policy mobile filled in.”; Start has `aria-disabled`; library `setInputFiles` enables Start (demo mobile prefilled). Do **not** click Start or grant mic |
+| `/` | Title contains Claimaroo; skip link; **Start a claim** → `/claim`; **Officer workspace** → `/claims` |
+| `/claim` | Hint “Add at least one photo and keep the policy mobile filled in.”; Start has `aria-disabled`; empty mobile + photo keep Start disabled until mobile filled. Do **not** click Start or grant mic |
 | `/claims` | Heading “Claims dashboard”; `CLM-DEMO-A` visible; **Home** → `/` |
 | `/claims/CLM-DEMO-A` | Case id in header; **Approve next stage** present |
 | `/scribe` | Heading “Talk naturally. See every word.” (no live scribe token) |

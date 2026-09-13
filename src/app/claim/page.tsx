@@ -88,7 +88,7 @@ function ClaimIntake() {
   const [lodged, setLodged] = useState(false);
   const [libraryOver, setLibraryOver] = useState(false);
   const [sessionUserId, setSessionUserId] = useState<string | null>(null);
-  const [phone, setPhone] = useState("0412 000 001");
+  const [phone, setPhone] = useState("");
   const [filingFallback, setFilingFallback] = useState(false);
 
   const photosRef = useRef<Photo[]>([]);
