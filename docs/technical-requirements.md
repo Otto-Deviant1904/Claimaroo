@@ -5,7 +5,7 @@
 | Version | 1.0 |
 | Date | 12 September 2026 |
 | Status | **Locked** |
-| Source of truth | This document. On conflict with the proposal in `README.md`, this specification wins. `docs/prd-v3.md` is superseded and must not be implemented. |
+| Source of truth | This document. On conflict with the proposal in `docs/hackathon-proposal.md`, this specification wins. `docs/prd-v3.md` is superseded and must not be implemented. |
 | Code baseline | `origin/main` after PR #3 (`8479593`) |
 
 Everything below is **MUST** unless marked SHOULD or MAY. Tables, enumerations, tool names, and HTTP routes are verified against the cited files on that baseline.
@@ -389,6 +389,6 @@ Missing ElevenLabs, LLM, or `LOCAL_VISION_URL` keys MUST NOT block schema, tools
 
 1. This specification (locked).
 2. Implementation on `main` for shapes already shipped (cite the file; do not silently diverge).
-3. Proposal narrative in `README.md` (product intent).
+3. Proposal narrative in `docs/hackathon-proposal.md` (product intent).
 4. `docs/handoff.md` (slice order).
 5. `docs/prd-v3.md` — **do not implement**.

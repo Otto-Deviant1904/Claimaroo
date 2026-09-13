@@ -1,4 +1,4 @@
-> **Superseded.** Track 1 FNOL-only PRD (v3). The live product spec is [README.md](../README.md) (Forward 2026 Track 2 proposal).
+> **Superseded.** Track 1 FNOL-only PRD (v3). The live product spec is [hackathon-proposal.md](hackathon-proposal.md) (Forward 2026 Track 2 proposal).
 
 # Voice-First-Motor-Claims-Intake-FNOL-with-Photo-Verification
 A voice AI agent that takes First Notice of Loss (FNOL) for motor vehicle collision claims over the phone, extracts structured claim data in real time, accepts a damage photo from the claimant after the call, and cross-checks what was said against what the photo shows. Uncertain or contradictory information is flagged for human review.
