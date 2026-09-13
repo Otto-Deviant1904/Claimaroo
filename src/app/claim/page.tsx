@@ -28,9 +28,30 @@ type Photo = {
 };
 
 type TokenResponse = {
-  agentId?: string;
-  conversationToken?: string;
+  agentId?: string | null;
+  conversationToken?: string | null;
   error?: string;
+};
+
+type ActivityStatus = "active" | "done" | "failed";
+type Activity = {
+  id: number;
+  label: string;
+  status: ActivityStatus;
+  ms?: number;
+};
+
+const TOOL_LABELS: Record<string, string> = {
+  get_customer: "Looking up your customer record",
+  get_policy: "Retrieving your policy details",
+  create_claim: "Filing your claim",
+  update_claim: "Updating your claim details",
+  attach_evidence: "Attaching your photos",
+  analyse_damage: "Analysing damage photos",
+  run_coverage_check: "Checking your coverage",
+  run_triage: "Prioritising your claim",
+  estimate_repair: "Estimating repair cost",
+  escalate_claim: "Bringing in a human officer",
 };
 
 type ToolBody = {
@@ -90,6 +111,7 @@ function ClaimIntake() {
   const [sessionUserId, setSessionUserId] = useState<string | null>(null);
   const [phone, setPhone] = useState("");
   const [filingFallback, setFilingFallback] = useState(false);
+  const [activities, setActivities] = useState<Activity[]>([]);
 
   const photosRef = useRef<Photo[]>([]);
   const claimIdRef = useRef<string | null>(null);
@@ -98,9 +120,22 @@ function ClaimIntake() {
   const lodgingFallbackRef = useRef(false);
   const transcriptRef = useRef<TranscriptEntry[]>([]);
   const transcriptSavedRef = useRef(0);
+  const activityIdRef = useRef(0);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const libraryInputRef = useRef<HTMLInputElement>(null);
   const lodgedHeadingRef = useRef<HTMLHeadingElement>(null);
+
+  const startActivity = useCallback((label: string) => {
+    const id = ++activityIdRef.current;
+    const started = performance.now();
+    setActivities((prev) => [...prev.slice(-3), { id, label, status: "active" }]);
+    return (status: ActivityStatus = "done") => {
+      const ms = Math.round(performance.now() - started);
+      setActivities((prev) =>
+        prev.map((a) => (a.id === id ? { ...a, status, ms } : a)),
+      );
+    };
+  }, []);
 
   const logTurn = useCallback(
     (role: TranscriptRole, text: string, name?: string) => {
@@ -187,11 +222,13 @@ function ClaimIntake() {
     setFilingFallback(true);
 
     try {
+      const finishLookup = startActivity(TOOL_LABELS.get_customer);
       const customerResponse = await fetch("/api/tools/get_customer", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ phone: phoneValue }),
       });
+      finishLookup();
       const customerBody = (await customerResponse.json()) as ToolBody;
       const customerResult = customerBody.result as
         | {
@@ -214,6 +251,7 @@ function ClaimIntake() {
         return null;
       }
 
+      const finishFiling = startActivity(TOOL_LABELS.create_claim);
       const createResponse = await fetch("/api/tools/create_claim", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -230,9 +268,11 @@ function ClaimIntake() {
       const createBody = (await createResponse.json()) as ToolBody;
       const createdId = readClaimId(createBody.result);
       if (!createResponse.ok || createBody.ok === false || !createdId) {
+        finishFiling("failed");
         setError(createBody.error ?? "Fallback create_claim failed.");
         return null;
       }
+      finishFiling("done");
 
       setClaimId(createdId);
       logTurn(
@@ -245,13 +285,16 @@ function ClaimIntake() {
       // Mirror the tooled agent flow: analyse, coverage, triage. Best-effort —
       // a filed claim with partial enrichment beats a failed lodge.
       for (const name of ["analyse_damage", "run_coverage_check", "run_triage"] as const) {
+        const finish = startActivity(TOOL_LABELS[name]);
         try {
           await fetch(`/api/tools/${name}`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ claim_id: createdId }),
           });
+          finish("done");
         } catch {
+          finish("failed");
           // Enrichment is best-effort after fallback lodge.
         }
       }
@@ -260,7 +303,7 @@ function ClaimIntake() {
       lodgingFallbackRef.current = false;
       setFilingFallback(false);
     }
-  }, [logTurn, persistTranscript, setClaimId]);
+  }, [logTurn, persistTranscript, setClaimId, startActivity]);
 
   const lodgeFallbackRef = useRef(lodgeFallbackIfNeeded);
   useEffect(() => {
@@ -269,6 +312,9 @@ function ClaimIntake() {
 
   useEffect(() => {
     if (status === "disconnected" && hasConnectedRef.current) {
+      setActivities((prev) =>
+        prev.map((a) => (a.status === "active" ? { ...a, status: "failed" } : a)),
+      );
       void (async () => {
         if (!claimIdRef.current) {
           await lodgeFallbackRef.current();
@@ -373,13 +419,22 @@ function ClaimIntake() {
     > = {};
     for (const name of TOOL_NAMES) {
       tools[name] = async (parameters) => {
+        const finish = startActivity(TOOL_LABELS[name] ?? `Running ${name}`);
         logTurn("tool", `called with ${JSON.stringify(parameters).slice(0, 300)}`, name);
-        const response = await fetch(`/api/tools/${name}`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(parameters),
-        });
-        const body = (await response.json()) as ToolBody;
+        let response: Response;
+        let body: ToolBody;
+        try {
+          response = await fetch(`/api/tools/${name}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(parameters),
+          });
+          body = (await response.json()) as ToolBody;
+        } catch {
+          finish("failed");
+          logTurn("tool", `failed: network error`, name);
+          return `${name} failed`;
+        }
         if (name === "create_claim") {
           const createdId = readClaimId(body.result);
           if (createdId) {
@@ -389,15 +444,17 @@ function ClaimIntake() {
           }
         }
         if (!response.ok || body.ok === false) {
+          finish("failed");
           logTurn("tool", `failed: ${body.error ?? "unknown error"}`, name);
           return body.error ?? body.resultText ?? `${name} failed`;
         }
+        finish("done");
         logTurn("tool", "succeeded", name);
         return body.resultText ?? JSON.stringify(body.result ?? {});
       };
     }
     return tools;
-  }, [logTurn, persistTranscript, setClaimId]);
+  }, [logTurn, persistTranscript, setClaimId, startActivity]);
 
   // Vercel Hobby caps request bodies at ~4.5MB. Re-encode oversized images so
   // real phone photos upload instead of failing evidence persistence.
@@ -522,12 +579,15 @@ function ClaimIntake() {
     const userId = sessionUserId ?? `session-${newLocalId()}`;
     setSessionUserId(userId);
 
+    const finishConnect = startActivity("Connecting to the claims line");
+
     startSession({
       ...session,
       userId,
       clientTools,
       onConnect: () => {
         hasConnectedRef.current = true;
+        finishConnect("done");
         try {
           sendContextualUpdate(
             `Customer mobile on screen: ${phoneRef.current}. ${photosRef.current.length} damage photo(s) are ready locally and will upload after create_claim. You MUST call get_customer with that phone, then create_claim, then attach_evidence and analyse_damage.`,
@@ -543,13 +603,14 @@ function ClaimIntake() {
         );
       },
       onError: (message) => {
+        finishConnect("failed");
         setError(typeof message === "string" ? message : String(message));
       },
       onUnhandledClientToolCall: (tool) => {
         setError(`The agent called an unknown tool: ${tool.tool_name}`);
       },
     });
-  }, [clientTools, logTurn, sessionUserId, startSession, sendContextualUpdate]);
+  }, [clientTools, logTurn, sessionUserId, startSession, sendContextualUpdate, startActivity]);
 
   const reset = useCallback(() => {
     for (const photo of photosRef.current) {
@@ -561,6 +622,7 @@ function ClaimIntake() {
     lodgingFallbackRef.current = false;
     transcriptRef.current = [];
     transcriptSavedRef.current = 0;
+    setActivities([]);
     setPhotosState([]);
     setClaimIdState(null);
     setSessionUserId(null);
@@ -602,6 +664,7 @@ function ClaimIntake() {
             headingRef={lodgedHeadingRef}
             claimId={claimId}
             photoCount={persistedCount}
+            activities={activities}
             onReset={reset}
           />
         ) : (
@@ -800,6 +863,29 @@ function ClaimIntake() {
                   Connecting…
                 </div>
               ) : null}
+              {activities.length > 0 ? (
+                <ul className="cl-activity" aria-live="polite">
+                  {activities.slice(-3).map((activity) => (
+                    <li
+                      key={activity.id}
+                      className={`cl-activity-item ${activity.status}`}
+                    >
+                      <span
+                        className="cl-activity-dot"
+                        aria-hidden="true"
+                      />
+                      <span>
+                        {activity.label}
+                        {activity.status === "active"
+                          ? "…"
+                          : activity.status === "failed"
+                            ? " — didn't finish"
+                            : ` · ${((activity.ms ?? 0) / 1000).toFixed(1)}s`}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
               {live ? (
                 <button
                   type="button"
@@ -881,14 +967,17 @@ function LodgedView({
   headingRef,
   claimId,
   photoCount,
+  activities,
   onReset,
 }: {
   headingRef: RefObject<HTMLHeadingElement | null>;
   claimId: string | null;
   photoCount: number;
+  activities: Activity[];
   onReset: () => void;
 }) {
   const filed = Boolean(claimId);
+  const finished = activities.filter((a) => a.status !== "active");
 
   return (
     <>
@@ -901,6 +990,25 @@ function LodgedView({
           ? "Keep this reference handy."
           : "The call ended before a claim number was filed, so nothing was sent to the claims team."}
       </p>
+
+      {finished.length > 0 ? (
+        <ul className="cl-activity" aria-live="polite">
+          {finished.slice(-4).map((activity) => (
+            <li
+              key={activity.id}
+              className={`cl-activity-item ${activity.status}`}
+            >
+              <span className="cl-activity-dot" aria-hidden="true" />
+              <span>
+                {activity.label}
+                {activity.status === "failed"
+                  ? " — didn't finish"
+                  : ` · ${((activity.ms ?? 0) / 1000).toFixed(1)}s`}
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
 
       {filed ? (
         <article className="cl-card cl-card-pad" style={{ marginTop: 20 }}>
