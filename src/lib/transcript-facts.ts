@@ -108,7 +108,7 @@ export function inferIntakeFromTranscript(
 
 function preferInferredFlag(
   stored: boolean | null | undefined,
-  inferred: boolean | undefined,
+  inferred: boolean | null | undefined,
 ): boolean | null {
   if (inferred === true) return true;
   return stored ?? null;
