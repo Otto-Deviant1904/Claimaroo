@@ -1,5 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import {
+  CaseCarousel,
+  type CaseCarouselSlide,
+} from "@/components/landing/case-carousel";
+import { ReadMore } from "@/components/landing/read-more";
 import "./landing.css";
 
 const WORKSPACE = "/claims";
@@ -37,56 +42,126 @@ const STATS = [
   },
 ] as const;
 
-const SAVINGS_ROWS: {
-  input: string;
-  value: string;
-  kind?: "derived" | "total";
-}[] = [
-  {
-    input: "Motor policies in Australia (Insurance Council of Australia)",
-    value: "~18m",
-  },
-  {
-    input: "Policyholders lodging a claim each year (1 in 7, per ICA)",
-    value: "14%",
-  },
-  {
-    input: "Implied motor claims lodged nationally",
-    value: "~2.5m",
-    kind: "derived",
-  },
-  {
-    input:
-      "Loaded onshore contact centre cost (A$60–70/hr benchmark; $65 used)",
-    value: "$1.08/min",
-  },
-  {
-    input:
-      "Officer minutes per lodged claim (call, follow-up and keying · modelled)",
-    value: "11 min",
-  },
-  { input: "Intake labour per claim", value: "$11.90", kind: "derived" },
-  { input: "Intake labour, modelled book", value: "$2.98m" },
-  {
-    input: "Intakes completed without an officer (modelled, not measured)",
-    value: "55%",
-  },
-  { input: "Gross labour released", value: "$1.64m", kind: "derived" },
-  { input: "Less voice agent run cost", value: "−$0.45m", kind: "derived" },
-  {
-    input: "Net per year, on intake alone",
-    value: "$1.19m",
-    kind: "total",
-  },
-];
-
 const SOURCES = [
   "General Insurance Code Governance Committee, Industry Data and Compliance Report 2024–25 — claims lodged, policies in force, breach counts, and the 20-business-day and 10-business-day obligations.",
   "Australian Financial Complaints Authority, Annual Review 2024–25 and 2025–26 complaint data — complaint volumes, motor as the most complained-about insurance product, delay in claim handling as the leading issue.",
   "Insurance Council of Australia, Motor Insurance Policy Paper: A Roadmap for Reducing Rising Premiums (March 2025) — claim frequency of 1 in 7, average claim size of $5,202, repair cycle times, claims cost composition.",
   "Insurance Council of Australia industry snapshot — approximately 18 million motor-related policies in Australia.",
   "Australian contact centre outsourcing benchmarks, 2026 — loaded onshore agent cost of A$60–70 per hour and voice average handle time of 4–7 minutes.",
+  "insurancenews.com.au, “Square numbers: the latest dispute data from AFCA’s cube” (10 November 2025) — AFCA Datacube complaint counts by underwriting entity, FY2024–25.",
+  "Budget Direct, Claims Process (budgetdirect.com.au) — published claim-decision commitment of 10 working days.",
+  "Australian Securities and Investments Commission, Media Release 26-036MR (27 February 2026, asic.gov.au) — Federal Court proceedings against Auto & General Insurance Company Ltd.",
 ] as const;
+
+type FormulaItem =
+  { value: string; label: string; highlight?: boolean } | { op: string };
+
+const FORMULA: FormulaItem[] = [
+  { value: "11 min", label: "officer time, per claim" },
+  { op: "×" },
+  { value: "$1.08", label: "loaded cost, per minute" },
+  { op: "×" },
+  { value: "250,000", label: "claims a year, modelled book" },
+  { op: "=" },
+  {
+    value: "$2.98m",
+    label: "intake labour at stake, modelled",
+    highlight: true,
+  },
+];
+
+const INSURER_STORIES: {
+  name: string;
+  stat: string;
+  statLabel: string;
+  gap: string;
+  possibility: string;
+}[] = [
+  {
+    name: "Allianz",
+    stat: "1,625",
+    statLabel: "AFCA complaints, FY2024–25 — 3rd-most nationally, all products",
+    gap: "Allianz underwrites its own book, so every dispute traces straight back to the name on the policy.",
+    possibility:
+      "A claim record that's complete from minute one is fewer disputes born from an incomplete one.",
+  },
+  {
+    name: "AAMI",
+    stat: "5,343",
+    statLabel:
+      "AFCA complaints booked to AAI Ltd — AAMI, Suncorp, GIO, Apia, Shannons & Vero combined",
+    gap: "AAMI's own number doesn't exist. The brand you trust isn't the entity anyone is actually measuring.",
+    possibility:
+      "A record structured to travel with the claim, not with the underwriting arrangement behind it.",
+  },
+  {
+    name: "Budget Direct",
+    stat: "10 days",
+    statLabel:
+      "Published claim-decision commitment — its underwriter is now in Federal Court over broken ones",
+    gap: "A promise on the website and the record behind it can drift apart for years before anyone catches it.",
+    possibility:
+      "Capturing the claim cleanly the first time is also how you catch that drift in year one, not year eight.",
+  },
+];
+
+const CASE_SLIDES: CaseCarouselSlide[] = [
+  {
+    eyebrow: "01 · THE MARKET",
+    title: "How big is the book?",
+    rows: [
+      { label: "Motor policies in Australia (ICA)", value: "~18m" },
+      { label: "Lodge a claim each year (1 in 7, per ICA)", value: "14%" },
+      {
+        label: "Implied motor claims lodged nationally",
+        value: "~2.5m",
+        derived: true,
+      },
+    ],
+  },
+  {
+    eyebrow: "02 · THE COST OF INTAKE",
+    title: "What one claim costs to open",
+    rows: [
+      {
+        label: "Loaded onshore rate (A$60–70/hr; $65 used)",
+        value: "$1.08/min",
+      },
+      { label: "Officer minutes per claim, modelled", value: "11 min" },
+      { label: "Intake labour per claim", value: "$11.90", derived: true },
+      { label: "Intake labour, modelled book", value: "$2.98m" },
+    ],
+  },
+  {
+    eyebrow: "03 · WHAT AUTOMATION RECOVERS",
+    title: "What comes back net",
+    rows: [
+      { label: "Intakes handled without an officer, modelled", value: "55%" },
+      { label: "Gross labour released", value: "$1.64m", derived: true },
+      { label: "Less voice agent run cost", value: "−$0.45m", derived: true },
+      {
+        label: "Net per year, on intake alone",
+        value: "$1.19m",
+        total: true,
+      },
+    ],
+  },
+  {
+    eyebrow: "04 · THE RANGE",
+    title: "It moves with the automation rate",
+    rows: [
+      { label: "At 35% automation", value: "~$0.75m" },
+      { label: "At 70% automation", value: "~$1.51m" },
+      { label: "Extrapolated across all AU motor claims", value: "~$12m/yr" },
+    ],
+  },
+  {
+    eyebrow: "05 · BUT THE MATH ASSUMES ONE THING",
+    title: "None of this works if the record can't be trusted.",
+    body: "A faster intake only pays off if what it captures holds up when a claims officer opens the file. That's the part that happens next.",
+    cta: { label: "See how claims teams review the record", href: "#record" },
+  },
+];
 
 export default function Home() {
   return (
@@ -263,108 +338,161 @@ export default function Home() {
           </div>
         </section>
 
-        <section id="numbers" className="wrap section numbers-section">
-          <div className="section-heading">
-            <div>
-              <div className="eyebrow">THE GAP</div>
-              <h2>
-                Australian motor claims don’t fail at assessment. They fail at
-                the handover.
-              </h2>
+        <section id="numbers" className="numbers-section">
+          <div className="wrap section">
+            <div className="section-heading">
+              <div>
+                <div className="eyebrow">THE GAP</div>
+                <h2>
+                  Australian motor claims don’t fail at assessment. They fail at
+                  the handover.
+                </h2>
+              </div>
+              <p>
+                Every figure below comes from the industry’s own compliance
+                reporting or the financial ombudsman.
+              </p>
             </div>
-            <p>
-              Every figure below comes from the industry’s own compliance
-              reporting or the financial ombudsman.
-            </p>
-          </div>
-          <div className="stat-grid">
-            {STATS.map((stat) => (
-              <article key={stat.label} className="stat">
-                <p className="stat-label">{stat.label}</p>
-                <p className={`stat-value ${stat.tone}`.trim()}>{stat.value}</p>
-                <p className="stat-note">{stat.note}</p>
-              </article>
-            ))}
-          </div>
-          <div className="gap-prose">
-            <p>
-              Comprehensive motor vehicle insurance is the most complained-about
-              insurance product in Australia. Motor claim delays account for
-              roughly one in four general insurance complaints reaching the
-              ombudsman, and delay in claim handling was the single most
-              complained-about issue across all of financial services.
-            </p>
-            <p>
-              The Code Governance Committee’s data points at the mechanism. The
-              obligation to update a customer at least every twenty business
-              days was breached 18,350 times in one year. More than half of the
-              insurers who missed claims-handling timeframes could not say by
-              how many days — a pattern the Committee described as structural
-              rather than individual error.
-            </p>
-            <p>
-              You cannot update a customer on a claim whose record is
-              incomplete, and you cannot measure a breach you never captured
-              cleanly. Both problems start in the first five minutes.
-            </p>
-          </div>
-          <p className="footnote">
-            ASIC named insurance claims handling among its enforcement
-            priorities for 2026, and the redrafted General Insurance Code of
-            Practice is intended to be contractually enforceable.
-          </p>
-
-          <div className="savings-block">
-            <div className="savings-head">
-              <h3 id="savings-heading">Annual intake cost, modelled</h3>
-              <span>250,000 motor claims a year · AUD</span>
-            </div>
-            <div className="savings-scroll">
-              <table className="savings-table" aria-labelledby="savings-heading">
-                <thead>
-                  <tr>
-                    <th>Input</th>
-                    <th>Value</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {SAVINGS_ROWS.map((row) => (
-                    <tr
-                      key={row.input}
-                      className={
-                        row.kind === "derived"
-                          ? "row-derived"
-                          : row.kind === "total"
-                            ? "row-total"
-                            : undefined
-                      }
-                    >
-                      <th scope="row">{row.input}</th>
-                      <td>{row.value}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <p className="savings-foot">
-              Sensitivity: at 35% automation the net is about $0.75m; at 70% it
-              is about $1.51m. Extrapolated across all Australian motor claims
-              the intake line is roughly $12m a year.
-            </p>
-          </div>
-
-          <div className="sources-block">
-            <div className="eyebrow">SOURCES</div>
-            <ul className="source-list">
-              {SOURCES.map((source) => (
-                <li key={source}>{source}</li>
+            <div className="stat-grid">
+              {STATS.map((stat) => (
+                <article key={stat.label} className="stat">
+                  <p className="stat-label">{stat.label}</p>
+                  <p className={`stat-value ${stat.tone}`.trim()}>
+                    {stat.value}
+                  </p>
+                  <p className="stat-note">{stat.note}</p>
+                </article>
               ))}
-            </ul>
-            <p className="footnote">
-              Automation rate, officer minutes per claim and voice run cost are
-              modelled by us and labelled as such in the table. Everything else
-              is published.
-            </p>
+            </div>
+            <ReadMore
+              moreLabel="Read the full picture"
+              lessLabel="Show less"
+              intro={
+                <p>
+                  Comprehensive motor vehicle insurance is the most
+                  complained-about insurance product in Australia. Motor claim
+                  delays account for roughly one in four general insurance
+                  complaints reaching the ombudsman — and delay in claim
+                  handling was the single most complained-about issue across all
+                  of financial services.
+                </p>
+              }
+              more={
+                <>
+                  <p>
+                    The Code Governance Committee’s data points at the
+                    mechanism. The obligation to update a customer at least
+                    every twenty business days was breached 18,350 times in one
+                    year. More than half of the insurers who missed
+                    claims-handling timeframes could not say by how many days —
+                    a pattern the Committee described as structural rather than
+                    individual error.
+                  </p>
+                  <p>
+                    You cannot update a customer on a claim whose record is
+                    incomplete, and you cannot measure a breach you never
+                    captured cleanly. Both problems start in the first five
+                    minutes.
+                  </p>
+                  <p className="footnote">
+                    ASIC named insurance claims handling among its enforcement
+                    priorities for 2026, and the redrafted General Insurance
+                    Code of Practice is intended to be contractually
+                    enforceable.
+                  </p>
+                </>
+              }
+            />
+
+            <div className="insurers-block">
+              <div className="eyebrow">NAMED INSURERS</div>
+              <h3 className="insurers-title">The gap, brand by brand</h3>
+              <p className="insurers-intro">
+                Three insurers, three shapes of the same problem — a market
+                reality check, not a rating. AFCA counts a dispute against the
+                underwriting entity, not the brand on your card, so the name a
+                customer trusts isn’t always the one anyone is measuring.
+              </p>
+              <div className="insurer-cards">
+                {INSURER_STORIES.map((story) => (
+                  <article className="insurer-card" key={story.name}>
+                    <div className="insurer-wordmark">{story.name}</div>
+                    <p className="insurer-stat">
+                      <strong>{story.stat}</strong> {story.statLabel}
+                    </p>
+                    <dl className="insurer-points">
+                      <div>
+                        <dt>The gap</dt>
+                        <dd>{story.gap}</dd>
+                      </div>
+                      <div>
+                        <dt>The possibility</dt>
+                        <dd>{story.possibility}</dd>
+                      </div>
+                    </dl>
+                  </article>
+                ))}
+              </div>
+              <p className="insurer-foot">
+                Not affiliated with Allianz, AAMI or Budget Direct. Figures are
+                public — see sources below.
+              </p>
+            </div>
+
+            <div className="savings-block">
+              <div className="savings-head">
+                <h3 id="savings-heading">The case, modelled</h3>
+                <span>250,000 motor claims a year · AUD</span>
+              </div>
+              <div className="formula-row">
+                {FORMULA.map((item, index) =>
+                  "op" in item ? (
+                    <span
+                      key={`op-${index}`}
+                      className="formula-op"
+                      aria-hidden="true"
+                    >
+                      {item.op}
+                    </span>
+                  ) : (
+                    <div
+                      key={item.label}
+                      className={`formula-term${
+                        item.highlight ? " formula-result" : ""
+                      }`}
+                    >
+                      <span className="formula-figure">{item.value}</span>
+                      <span className="formula-caption">{item.label}</span>
+                    </div>
+                  ),
+                )}
+              </div>
+              <p className="formula-note">
+                That’s the money before automation rate or run cost enter the
+                picture. Work through both and $1.19m of it comes home net —
+                swipe through the full working.
+              </p>
+              <CaseCarousel slides={CASE_SLIDES} />
+            </div>
+
+            <div className="sources-block">
+              <ReadMore
+                moreLabel="See more sources"
+                lessLabel="Show fewer sources"
+                more={
+                  <ul className="source-list">
+                    {SOURCES.map((source) => (
+                      <li key={source}>{source}</li>
+                    ))}
+                  </ul>
+                }
+              />
+              <p className="footnote">
+                Automation rate, officer minutes per claim and voice run cost
+                are modelled by us and labelled as such above. Everything else
+                is published.
+              </p>
+            </div>
           </div>
         </section>
 
@@ -458,8 +586,7 @@ export default function Home() {
             <div className="eyebrow">FOCUSED WHERE IT MATTERS</div>
             <h2>
               A better beginning.
-              <br />
-              A person-led outcome.
+              <br />A person-led outcome.
             </h2>
           </div>
           <div>

@@ -499,19 +499,34 @@
 
 /* Numbers: industry stats + savings */
 .landing .numbers-section {
+  background: linear-gradient(180deg, #eef1e5 0%, #e7ecdd 100%);
+  border-top: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
 }
 
 .landing .stat-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 20px;
+  gap: 16px;
   margin: 36px 0 40px;
 }
 
 .landing .stat {
-  border-top: 1px solid #cad7ca;
-  padding-top: 18px;
+  background: #fff;
+  border-radius: 14px;
+  padding: 22px 20px 20px;
+  border-top: 3px solid #cfe0a6;
+  box-shadow:
+    0 1px 2px rgba(21, 45, 50, 0.04),
+    0 10px 24px rgba(21, 45, 50, 0.06);
+}
+
+.landing .stat:has(.tone-amber) {
+  border-top-color: #e3c470;
+}
+
+.landing .stat:has(.tone-red) {
+  border-top-color: #d99a8f;
 }
 
 .landing .stat-label {
@@ -566,11 +581,72 @@
 }
 
 .landing .savings-block {
-  margin-top: 56px;
+  margin-top: 40px;
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: 14px;
   background: #fff;
   overflow: hidden;
+  box-shadow:
+    0 1px 2px rgba(21, 45, 50, 0.04),
+    0 16px 32px rgba(21, 45, 50, 0.08);
+}
+
+.landing .formula-row {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 20px 28px;
+  padding: 30px 24px 26px;
+  border-bottom: 1px solid var(--border);
+  background: #fafcfa;
+}
+
+.landing .formula-term {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.landing .formula-figure {
+  font-family: Manrope, sans-serif;
+  font-weight: 800;
+  font-size: clamp(26px, 3.6vw, 44px);
+  letter-spacing: -1.6px;
+  line-height: 1;
+  color: var(--ink);
+  white-space: nowrap;
+}
+
+.landing .formula-caption {
+  font-size: 11px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.landing .formula-op {
+  font-family: Manrope, sans-serif;
+  font-weight: 600;
+  font-size: clamp(20px, 2.6vw, 30px);
+  color: #a9b8b0;
+  padding-bottom: 18px;
+}
+
+.landing .formula-result .formula-figure {
+  display: inline-block;
+  color: #2f5d20;
+  background: var(--green);
+  padding: 2px 14px;
+  border-radius: 8px;
+}
+
+.landing .formula-note {
+  font-size: 13px;
+  color: var(--muted);
+  max-width: 640px;
+  margin: 0;
+  padding: 18px 24px 22px;
 }
 
 .landing .savings-head {
@@ -595,75 +671,327 @@
   color: #6b7d70;
 }
 
-.landing .savings-scroll {
-  overflow-x: auto;
+/* Read more disclosure */
+.landing .read-more-intro {
+  max-width: 780px;
 }
 
-.landing .savings-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 14px;
+.landing .read-more-intro p {
+  font-size: 15px;
+  line-height: 1.8;
+  margin: 0;
 }
 
-.landing .savings-table th,
-.landing .savings-table td {
-  padding: 14px 24px;
-  text-align: left;
-  border-bottom: 1px solid #edf1ed;
-  vertical-align: top;
+.landing .read-more-panel {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.4s ease;
+  max-width: 780px;
 }
 
-.landing .savings-table thead th {
-  font-size: 12px;
-  letter-spacing: 0.8px;
-  color: #6b7d70;
+.landing .read-more-panel.is-open {
+  grid-template-rows: 1fr;
+}
+
+.landing .read-more-panel-inner {
+  overflow: hidden;
+  min-height: 0;
+}
+
+.landing .read-more-panel-inner p {
+  font-size: 15px;
+  line-height: 1.8;
+  margin: 16px 0 0;
+}
+
+.landing .read-more-toggle {
+  display: inline-flex;
+  align-items: center;
+  margin-top: 18px;
+  gap: 7px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font-size: 13px;
   font-weight: 650;
-  background: #fafcfa;
+  color: var(--ink);
 }
 
-.landing .savings-table tbody th {
-  font-weight: 500;
+.landing .read-more-toggle:hover {
+  color: #57883c;
+}
+
+.landing .read-more-chevron {
+  display: inline-block;
+  font-size: 11px;
+  transition: transform 0.25s ease;
+}
+
+.landing .read-more-chevron.is-open {
+  transform: rotate(180deg);
+}
+
+/* Named insurers */
+.landing .insurers-block {
+  margin-top: 48px;
+}
+
+.landing .insurers-title {
+  font-size: 22px;
+  letter-spacing: -0.5px;
+  margin: 14px 0 12px;
+}
+
+.landing .insurers-intro {
+  font-size: 15px;
+  line-height: 1.8;
+  max-width: 760px;
+  margin: 0 0 24px;
+}
+
+.landing .insurer-cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 18px;
+}
+
+.landing .insurer-card {
+  border: 1px solid var(--border);
+  border-top: 3px solid var(--green);
+  border-radius: 14px;
+  background: #fff;
+  padding: 26px 24px;
+  box-shadow:
+    0 1px 2px rgba(21, 45, 50, 0.04),
+    0 10px 24px rgba(21, 45, 50, 0.06);
+}
+
+.landing .insurer-wordmark {
+  font-family: Manrope, sans-serif;
+  font-weight: 800;
+  font-size: 24px;
+  letter-spacing: -0.9px;
+  color: var(--ink);
+  margin-bottom: 14px;
+}
+
+.landing .insurer-stat {
+  font-size: 13px;
   color: var(--muted);
+  line-height: 1.6;
+  margin: 0 0 20px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--border);
+}
+
+.landing .insurer-stat strong {
+  display: block;
+  font-family: Manrope, sans-serif;
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.7px;
+  color: var(--ink);
+  margin-bottom: 4px;
+}
+
+.landing .insurer-points dt {
+  font-size: 11px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: #7b8c80;
+  font-weight: 650;
+  margin-bottom: 5px;
+}
+
+.landing .insurer-points dd {
+  font-size: 14px;
+  line-height: 1.65;
+  color: var(--ink);
+  margin: 0 0 16px;
+}
+
+.landing .insurer-points div:last-child dd {
+  margin-bottom: 0;
+}
+
+.landing .insurer-foot {
+  font-size: 13px;
+  color: var(--muted);
+  margin: 18px 0 0;
+  max-width: 760px;
+}
+
+/* Case carousel */
+.landing .case-carousel {
+  border-top: 1px solid var(--border);
+}
+
+.landing .case-track {
+  display: flex;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+}
+
+.landing .case-track::-webkit-scrollbar {
+  display: none;
+}
+
+.landing .case-slide {
+  flex: 0 0 100%;
+  scroll-snap-align: start;
+  padding: 28px 24px 26px;
+  min-height: 220px;
+}
+
+.landing .case-eyebrow {
+  display: block;
+  font-size: 11px;
+  letter-spacing: 1px;
+  font-weight: 700;
+  color: #7b8c80;
+  margin-bottom: 10px;
+}
+
+.landing .case-title {
+  font-size: 19px;
+  letter-spacing: -0.4px;
+  margin: 0 0 18px;
   max-width: 520px;
 }
 
-.landing .savings-table td {
-  font-weight: 650;
+.landing .case-rows {
+  display: flex;
+  flex-direction: column;
+  max-width: 640px;
+}
+
+.landing .case-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 20px;
+  padding: 12px 0;
+  border-bottom: 1px solid #edf1ed;
+}
+
+.landing .case-row-label {
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.landing .case-row.is-derived .case-row-label,
+.landing .case-row.is-derived .case-row-value {
+  color: var(--ink);
+}
+
+.landing .case-row-value {
+  font-family: Manrope, sans-serif;
+  font-weight: 700;
+  font-size: 15px;
   color: var(--ink);
   white-space: nowrap;
-  text-align: right;
 }
 
-.landing .savings-table tr.row-derived th,
-.landing .savings-table tr.row-derived td {
-  color: var(--ink);
-}
-
-.landing .savings-table tr.row-total {
+.landing .case-row.is-total {
+  margin-top: 4px;
+  padding: 14px 16px;
+  border-bottom: 0;
+  border-radius: 8px;
   background: #eaf4e2;
 }
 
-.landing .savings-table tr.row-total th,
-.landing .savings-table tr.row-total td {
+.landing .case-row.is-total .case-row-label,
+.landing .case-row.is-total .case-row-value {
   color: var(--ink);
   font-weight: 700;
-  border-bottom: 0;
 }
 
-.landing .savings-foot {
-  font-size: 13px;
+.landing .case-row.is-total .case-row-value {
+  font-size: 17px;
+}
+
+.landing .case-body {
+  font-size: 16px;
+  line-height: 1.7;
   color: var(--muted);
-  margin: 0;
-  padding: 16px 24px 20px;
+  max-width: 480px;
+  margin: 0 0 18px;
+}
+
+.landing .case-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 650;
+  font-size: 14px;
+  color: var(--ink);
+}
+
+.landing .case-cta:hover {
+  color: #57883c;
+}
+
+.landing .case-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  padding: 14px 24px 22px;
   border-top: 1px solid var(--border);
+}
+
+.landing .case-arrow {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: #fff;
+  color: var(--ink);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  transition:
+    background 0.2s,
+    opacity 0.2s;
+}
+
+.landing .case-arrow:hover:not(:disabled) {
+  background: var(--green);
+}
+
+.landing .case-arrow:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.landing .case-dots {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.landing .case-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  border: 0;
+  background: #cad5cf;
+  padding: 0;
+  transition:
+    background 0.2s,
+    width 0.2s;
+}
+
+.landing .case-dot.is-active {
+  width: 20px;
+  border-radius: 4px;
+  background: #588544;
 }
 
 .landing .sources-block {
   margin-top: 28px;
-}
-
-.landing .sources-block .eyebrow {
-  margin-bottom: 12px;
 }
 
 .landing .source-list {
@@ -1007,6 +1335,10 @@
   .landing .stat-grid {
     grid-template-columns: repeat(2, 1fr);
   }
+
+  .landing .insurer-cards {
+    grid-template-columns: repeat(2, 1fr);
+  }
 }
 
 @media (max-width: 650px) {
@@ -1172,9 +1504,36 @@
     font-size: 18px;
   }
 
-  .landing .savings-table th,
-  .landing .savings-table td {
-    padding: 12px 16px;
+  .landing .formula-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 14px;
+    padding: 22px 18px 18px;
+  }
+
+  .landing .formula-op {
+    padding-bottom: 0;
+    font-size: 18px;
+  }
+
+  .landing .formula-note {
+    padding: 16px 18px 20px;
+  }
+
+  .landing .insurer-cards {
+    grid-template-columns: 1fr;
+  }
+
+  .landing .insurer-card {
+    padding: 22px 20px;
+  }
+
+  .landing .case-slide {
+    padding: 22px 18px 20px;
+  }
+
+  .landing .case-controls {
+    padding: 12px 18px 18px;
   }
 }
 
