@@ -148,8 +148,9 @@ describe("analyseDamage", () => {
     const { mapZone } = await import("./claim-view");
     expect(result.usedLocalModel).toBe(true);
     expect(result.usedVisionModel).toBe(true);
-    expect(result.analyzer).toBe("local_model");
-    expect(result.findings[0]?.source).toBe("local_model");
+    expect(result.analyzer).toBe("vision");
+    expect(result.findings[0]?.source).toBe("vision");
+    expect(result.findings[0]?.observation).toMatch(/left rear door/i);
     expect(result.findings[0]?.area).toBe("left door");
     expect(result.findings[1]?.area).toBe("left door");
     expect(mapZone(result.findings[0]?.area ?? "")).toBe("left side");

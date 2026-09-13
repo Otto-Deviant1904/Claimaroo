@@ -132,37 +132,13 @@ async function localModelAnalyse(file: EvidenceFile): Promise<DamageAnalysis | n
   }
 }
 
-function partKey(text: string): string | null {
-  const lower = text.toLowerCase();
-  if (/\b(door|doors)\b/.test(lower)) return "door";
-  if (/\b(fender|wing|quarter)\b/.test(lower)) return "fender";
-  if (/\b(bumper|tailgate)\b/.test(lower)) return "bumper";
-  if (/\bheadlight\b/.test(lower)) return "headlight";
-  if (/\b(windscreen|windshield)\b/.test(lower)) return "windscreen";
-  if (/\broof\b/.test(lower)) return "roof";
-  return null;
-}
-
 function applyVisionLocations(
   localFindings: DamageFinding[],
   visionText: string,
 ): DamageFinding[] {
-  const located = findingsFromVisionText(visionText).filter(
-    (finding) => finding.area !== "observed",
-  );
-  if (located.length === 0) return localFindings;
-  return localFindings.map((finding, index) => {
-    const part = partKey(`${finding.area} ${finding.observation}`);
-    const match =
-      (part
-        ? located.find((candidate) =>
-            partKey(`${candidate.area} ${candidate.observation}`) === part,
-          )
-        : undefined) ??
-      located[index] ??
-      located[0];
-    return { ...finding, area: match.area };
-  });
+  const described = findingsFromVisionText(visionText);
+  if (described.length === 0) return localFindings;
+  return described;
 }
 
 async function locateLocalFindings(
@@ -182,10 +158,13 @@ async function locateLocalFindings(
   return {
     ...local,
     findings,
-    observations: [...local.observations, vision.text],
+    observations: [vision.text],
     usedVisionModel: true,
+    analyzer: findings.some((finding) => finding.source === "vision")
+      ? "vision"
+      : local.analyzer,
     limitations:
-      "Local model detected damage; a vision model assigned location on the vehicle. Lighting, angle, and concealment can hide damage. Not a repairer inspection. Preliminary, not binding.",
+      "Photo description from a vision model. A local classifier first flagged possible damage. Lighting, angle, and concealment can hide damage. Not a repairer inspection. Preliminary, not binding.",
   };
 }
 
@@ -209,12 +188,12 @@ async function visionAnalyse(
   const b64 = file.bytes.toString("base64");
 
   const locateHint = localFindings?.length
-    ? ` A local damage model already detected: ${localFindings
-        .map((finding) => `${finding.area} — ${finding.observation} (${finding.severity})`)
-        .join("; ")}. Use the photo to assign each detection a specific vehicle area with left/right and front/rear when visible (for example: left rear door, right front fender, rear bumper, left headlight). Start each line with that area.`
+    ? ` A local classifier flagged: ${localFindings
+        .map((finding) => `${finding.area} (${finding.severity})`)
+        .join("; ")}. Do not repeat those labels. Describe what the photo actually shows.`
     : "";
   const instruction =
-    "You are assisting a motor-claims prototype. Describe only visible vehicle damage. If you cannot see damage, say so. Return 2-6 short factual observations. Start each line with the vehicle area (e.g. front bumper, left headlight, rear door). Do not estimate cost. Do not state coverage. Label uncertainty." +
+    "You are assisting a motor-claims prototype. Describe only visible vehicle damage in the photo. If you cannot see damage, say so. Return 2-6 factual lines. Start each line with the vehicle area using left/right and front/rear when visible (e.g. left rear door, rear bumper, right front fender). Then describe the visible damage in plain language: dents, creases, scratches, missing paint, misalignment, broken lights. Do not estimate cost. Do not state coverage. Label uncertainty." +
     locateHint;
 
   try {
