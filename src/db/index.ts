@@ -19,8 +19,14 @@ function sslFor(url: string): false | { rejectUnauthorized: false } {
     const sslMode = parsed.searchParams.get("sslmode");
     if (host === "localhost" || host === "127.0.0.1") return false;
     if (sslMode === "disable") return false;
-    // Render's public hostname needs TLS. The internal dpg-*-a host does not.
-    if (host.endsWith(".render.com") || sslMode === "require") {
+    // Hosted Postgres (Render, Supabase, Neon) needs TLS.
+    if (
+      host.endsWith(".render.com") ||
+      host.endsWith(".supabase.co") ||
+      host.endsWith(".supabase.com") ||
+      host.endsWith(".neon.tech") ||
+      sslMode === "require"
+    ) {
       return { rejectUnauthorized: false };
     }
     return false;
