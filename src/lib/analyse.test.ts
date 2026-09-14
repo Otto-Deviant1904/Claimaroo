@@ -69,6 +69,51 @@ describe("analyseDamage", () => {
     expect(result.usedLocalModel).toBe(false);
   });
 
+  it("hard-falls back to GPT vision when the local model fails and OPENAI_API_KEY is set", async () => {
+    process.env.LOCAL_VISION_URL = "http://127.0.0.1:9999/analyse";
+    process.env.OPENAI_API_KEY = "sk-test";
+    process.env.LLM_PROVIDER = "anthropic"; // must still prefer GPT after local miss
+    process.env.ANTHROPIC_API_KEY = "ant-test";
+    const fetchMock = vi.fn(async (url: string) => {
+      if (String(url).includes("9999")) {
+        throw new Error("connection refused");
+      }
+      if (String(url).includes("api.anthropic.com")) {
+        throw new Error("anthropic should not be first after local miss");
+      }
+      return {
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                content: "- Rear bumper dented\n- Paint scratched on rear bumper",
+              },
+            },
+          ],
+        }),
+      };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await analyseDamage([png]);
+    expect(result.analyzer).toBe("vision");
+    expect(result.usedLocalModel).toBe(false);
+    expect(result.usedVisionModel).toBe(true);
+    expect(result.findings.some((f) => f.source === "vision")).toBe(true);
+    expect(result.limitations.toLowerCase()).toContain("fell back to cloud vision");
+    expect(
+      fetchMock.mock.calls.some((call) =>
+        String(call[0]).includes("/chat/completions"),
+      ),
+    ).toBe(true);
+    expect(
+      fetchMock.mock.calls.every(
+        (call) => !String(call[0]).includes("api.anthropic.com"),
+      ),
+    ).toBe(true);
+  });
+
   it("calls an OpenAI-compatible gateway with configured base URL and model", async () => {
     process.env.OPENAI_API_KEY = "sk-test";
     process.env.OPENAI_BASE_URL = "https://agentrouter.org/v1/";

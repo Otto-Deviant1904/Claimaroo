@@ -193,12 +193,21 @@ function resolveVisionProvider(): "openai" | "anthropic" | null {
   return null;
 }
 
+/** After local model miss/fail: GPT first, then Anthropic. Heuristic is last resort. */
+function hardFallbackVisionProviders(): Array<"openai" | "anthropic"> {
+  const providers: Array<"openai" | "anthropic"> = [];
+  if (process.env.OPENAI_API_KEY?.trim()) providers.push("openai");
+  if (process.env.ANTHROPIC_API_KEY?.trim()) providers.push("anthropic");
+  return providers;
+}
+
 async function visionAnalyse(
   file: EvidenceFile,
   localFindings?: DamageFinding[],
   options?: AnalyseOptions,
+  forcedProvider?: "openai" | "anthropic",
 ): Promise<{ text: string | null; error: string | null }> {
-  const provider = resolveVisionProvider();
+  const provider = forcedProvider ?? resolveVisionProvider();
   if (!provider) return { text: null, error: "no_provider" };
   if (!file.bytes) return { text: null, error: "no_bytes" };
   const mime = file.mimeType;
@@ -467,15 +476,18 @@ async function analyseSingleFile(
   const local = await localModelAnalyse(file);
   if (local) return locateLocalFindings(file, local, options);
 
-  const vision = await visionAnalyse(file, undefined, options);
-  if (vision.text) {
+  // Hard fallback when local model is unset, down, empty, or throws:
+  // try GPT (OpenAI) first, then Anthropic, then filename heuristic.
+  for (const provider of hardFallbackVisionProviders()) {
+    const vision = await visionAnalyse(file, undefined, options, provider);
+    if (!vision.text) continue;
     const findings = findingsFromVisionText(vision.text);
     return {
       observations: [vision.text],
       findings: findings.length ? findings : heuristicFromFilename(file.filename),
       confidence: "medium",
       limitations:
-        "Vision output is a model observation of uploaded pixels only. Lighting, angle, and concealment can hide damage. Not a repairer inspection. Preliminary.",
+        "Local damage model unavailable or returned no findings; fell back to cloud vision. Lighting, angle, and concealment can hide damage. Not a repairer inspection. Preliminary.",
       usedVisionModel: true,
       usedLocalModel: false,
       analyzer: "vision",
