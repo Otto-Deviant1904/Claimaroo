@@ -473,7 +473,7 @@ Copied from [`.env.example`](.env.example). Next.js loads `.env.local`. Server-o
 | Variable | Description | Default |
 | --- | --- | --- |
 | `NEXT_PUBLIC_ELEVENLABS_AGENT_ID` | Client fallback if the server id is unset | — |
-| `LOCAL_VISION_URL` | Self-hosted damage classifier. `POST { filename, mime_type, image_base64 }`, 8s timeout | — |
+| `LOCAL_VISION_URL` | Self-hosted YOLOv8 damage classifier. `POST { filename, mime_type, image_base64 }`, 8s timeout. Laptop: `http://127.0.0.1:8901/analyse` (cloudflared for Vercel). Colab: serve cell in `~/Downloads/colab_nb.ipynb`. Ops: `~/Downloads/claimaroo-test/README.md` | — |
 | `OPENAI_API_KEY` | OpenAI-compatible vision | — |
 | `OPENAI_BASE_URL` | Gateway origin | `https://api.openai.com/v1` |
 | `OPENAI_VISION_MODEL` | Vision model id | `gpt-4o-mini` (DeepSeek: `deepseek-flash`) |
