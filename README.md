@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/claimaroo-logo.png" alt="Claimaroo" width="320" />
+  <img src="docs/claimaroo-logo.png" alt="Claimaroo" width="480" />
 </p>
 
 # Claimaroo
